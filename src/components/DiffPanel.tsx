@@ -1,5 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
-import Editor, { DiffEditor } from '@monaco-editor/react';
+import { useEffect, useState } from 'react';
 import { useStore } from '../state/store';
 import { api } from '../lib/api';
 import { toast } from 'sonner';
@@ -16,10 +15,34 @@ export function DiffPanel() {
     hunkIndex: number;
   } | null>(null);
 
-  const editorRef = useRef<any>(null);
+  // Line selection state: Map of hunkIndex -> Set of lineIndices
+  const [selectedLines, setSelectedLines] = useState<Map<number, Set<number>>>(new Map());
+  // Track last clicked line for shift-select
+  const [lastClickedLine, setLastClickedLine] = useState<{ hunkIndex: number; lineIndex: number } | null>(null);
+  // Track drag state
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState<{ hunkIndex: number; lineIndex: number } | null>(null);
 
   // Determine if we're viewing staged changes based on which diff side we loaded
   const isViewingStaged = currentDiffSide === 'index';
+
+  // Clear selection when diff changes
+  useEffect(() => {
+    setSelectedLines(new Map());
+    setLastClickedLine(null);
+    setIsDragging(false);
+    setDragStart(null);
+  }, [currentDiff]);
+
+  // Handle mouse up globally to end drag
+  useEffect(() => {
+    const handleMouseUp = () => {
+      setIsDragging(false);
+      setDragStart(null);
+    };
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => window.removeEventListener('mouseup', handleMouseUp);
+  }, []);
 
   useEffect(() => {
     const handleClick = () => setContextMenu(null);
@@ -103,57 +126,159 @@ export function DiffPanel() {
     }
   };
 
-  const handleStageLines = async (hunkIndex: number, lineIndices: number[]) => {
+  const handleLineMouseDown = (hunkIndex: number, lineIndex: number, origin: string, e: React.MouseEvent) => {
+    // Only allow selecting added lines
+    if (origin !== '+') {
+      return;
+    }
+
+    e.preventDefault();
+    setIsDragging(true);
+    setDragStart({ hunkIndex, lineIndex });
+
+    setSelectedLines((prev) => {
+      const newMap = new Map(prev);
+      const hunkLines = newMap.get(hunkIndex) || new Set<number>();
+
+      if (e.shiftKey && lastClickedLine && lastClickedLine.hunkIndex === hunkIndex) {
+        // Shift-select: select range from last clicked to current
+        const start = Math.min(lastClickedLine.lineIndex, lineIndex);
+        const end = Math.max(lastClickedLine.lineIndex, lineIndex);
+
+        const hunk = currentDiff?.hunks[hunkIndex];
+        if (hunk) {
+          for (let i = start; i <= end; i++) {
+            if (hunk.lines[i]?.origin === '+') {
+              hunkLines.add(i);
+            }
+          }
+        }
+      } else if (e.ctrlKey || e.metaKey) {
+        // Ctrl/Cmd-select: toggle line
+        if (hunkLines.has(lineIndex)) {
+          hunkLines.delete(lineIndex);
+        } else {
+          hunkLines.add(lineIndex);
+        }
+      } else {
+        // Single select: clear others and select this line
+        hunkLines.clear();
+        hunkLines.add(lineIndex);
+      }
+
+      if (hunkLines.size === 0) {
+        newMap.delete(hunkIndex);
+      } else {
+        newMap.set(hunkIndex, hunkLines);
+      }
+
+      return newMap;
+    });
+
+    setLastClickedLine({ hunkIndex, lineIndex });
+  };
+
+  const handleLineMouseEnter = (hunkIndex: number, lineIndex: number, origin: string) => {
+    if (!isDragging || !dragStart || origin !== '+' || dragStart.hunkIndex !== hunkIndex) {
+      return;
+    }
+
+    // During drag, select range from drag start to current
+    setSelectedLines((prev) => {
+      const newMap = new Map(prev);
+      const hunkLines = newMap.get(hunkIndex) || new Set<number>();
+
+      const start = Math.min(dragStart.lineIndex, lineIndex);
+      const end = Math.max(dragStart.lineIndex, lineIndex);
+
+      const hunk = currentDiff?.hunks[hunkIndex];
+      if (hunk) {
+        // Clear and reselect range
+        hunkLines.clear();
+        for (let i = start; i <= end; i++) {
+          if (hunk.lines[i]?.origin === '+') {
+            hunkLines.add(i);
+          }
+        }
+      }
+
+      if (hunkLines.size === 0) {
+        newMap.delete(hunkIndex);
+      } else {
+        newMap.set(hunkIndex, hunkLines);
+      }
+
+      return newMap;
+    });
+  };
+
+  const handleStageSelectedLines = async (hunkIndex: number) => {
+    const lineIndices = Array.from(selectedLines.get(hunkIndex) || []);
+    if (lineIndices.length === 0) return;
+
+    await handleStageLines(hunkIndex, lineIndices, isViewingStaged);
+
+    // Clear selection after staging/unstaging
+    setSelectedLines((prev) => {
+      const newMap = new Map(prev);
+      newMap.delete(hunkIndex);
+      return newMap;
+    });
+  };
+
+  const handleStageLines = async (hunkIndex: number, lineIndices: number[], unstage: boolean) => {
     if (!repo || !selectedPath || lineIndices.length === 0) return;
 
     setIsOperating(true);
     setContextMenu(null);
 
     try {
+      console.log(unstage ? 'Unstaging lines:' : 'Staging lines:', { hunkIndex, lineIndices, path: selectedPath });
+
       const response = await api.stageLines({
         repoId: repo.repoId,
         path: selectedPath,
         hunkIndex,
         lineIndices,
-        unstage: false,
+        unstage,
       });
+
+      console.log('Stage lines response:', response);
 
       if (response.ok && response.data) {
         useStore.getState().updateStatus(response.data);
-        toast.success(`Staged ${lineIndices.length} line(s)`);
-        // Reload diff
-        useStore.getState().loadDiff(repo.repoId, selectedPath, 'working');
+        toast.success(unstage ? `Unstaged ${lineIndices.length} line(s)` : `Staged ${lineIndices.length} line(s)`);
+
+        // Check if file still has changes to show
+        const updatedEntry = response.data.entries.find((e) => e.path === selectedPath);
+        if (updatedEntry) {
+          // Check if the file still has changes in the current view
+          if (!unstage && updatedEntry.unstagedStatus) {
+            await useStore.getState().loadDiff(repo.repoId, selectedPath, 'working');
+          } else if (unstage && updatedEntry.stagedStatus) {
+            await useStore.getState().loadDiff(repo.repoId, selectedPath, 'index');
+          } else {
+            useStore.getState().clearDiff();
+          }
+        } else {
+          useStore.getState().clearDiff();
+        }
       } else {
-        toast.error(response.message || 'Failed to stage lines');
+        console.error('Stage lines failed:', response);
+        toast.error(response.message || (unstage ? 'Failed to unstage lines' : 'Failed to stage lines'));
       }
     } catch (error) {
+      console.error('Stage lines error:', error);
       toast.error(error instanceof Error ? error.message : 'Unknown error');
     } finally {
       setIsOperating(false);
     }
   };
 
-  // Convert diff to Monaco format
-  const originalContent = currentDiff.hunks
-    .flatMap((hunk) =>
-      hunk.lines
-        .filter((line) => line.origin === '-' || line.origin === ' ')
-        .map((line) => line.content.trimEnd())
-    )
-    .join('\n');
-
-  const modifiedContent = currentDiff.hunks
-    .flatMap((hunk) =>
-      hunk.lines
-        .filter((line) => line.origin === '+' || line.origin === ' ')
-        .map((line) => line.content.trimEnd())
-    )
-    .join('\n');
-
   return (
-    <div className="flex-1 flex flex-col relative">
+    <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="px-4 py-2 bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
+      <div className="px-4 py-2 bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="text-sm font-mono text-gray-600 dark:text-gray-400">
@@ -187,32 +312,65 @@ export function DiffPanel() {
             {/* Hunk header */}
             <div className="px-4 py-1 bg-blue-50 dark:bg-blue-900/20 text-xs font-mono text-blue-600 dark:text-blue-400 flex items-center justify-between">
               <span>{hunk.header}</span>
-              <button
-                onClick={() => handleStageHunk(hunkIndex, isViewingStaged)}
-                className="px-2 py-0.5 bg-blue-500 text-white rounded text-xs hover:bg-blue-600"
-              >
-                {isViewingStaged ? 'Unstage Hunk' : 'Stage Hunk'}
-              </button>
+              <div className="flex items-center gap-2">
+                {selectedLines.get(hunkIndex)?.size ? (
+                  <button
+                    onClick={() => handleStageSelectedLines(hunkIndex)}
+                    className="px-2 py-0.5 bg-green-500 text-white rounded text-xs hover:bg-green-600"
+                  >
+                    {isViewingStaged ? 'Unstage' : 'Stage'} {selectedLines.get(hunkIndex)?.size} Line(s)
+                  </button>
+                ) : null}
+                <button
+                  onClick={() => handleStageHunk(hunkIndex, isViewingStaged)}
+                  className="px-2 py-0.5 bg-blue-500 text-white rounded text-xs hover:bg-blue-600"
+                >
+                  {isViewingStaged ? 'Unstage Hunk' : 'Stage Hunk'}
+                </button>
+              </div>
             </div>
 
             {/* Hunk lines */}
-            <div className="font-mono text-xs">
-              {hunk.lines.map((line, lineIndex) => (
-                <div
-                  key={lineIndex}
-                  className={`
-                    px-4 py-0.5 whitespace-pre
-                    ${line.origin === '+' ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300' : ''}
-                    ${line.origin === '-' ? 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300' : ''}
-                    ${line.origin === ' ' ? 'text-gray-700 dark:text-gray-300' : ''}
-                  `}
-                >
-                  <span className="inline-block w-4 text-gray-400 select-none">
-                    {line.origin}
-                  </span>
-                  {line.content.trimEnd()}
-                </div>
-              ))}
+            <div className="font-mono text-xs select-none">
+              {hunk.lines.map((line, lineIndex) => {
+                const isSelected = selectedLines.get(hunkIndex)?.has(lineIndex);
+                const isAddedLine = line.origin === '+' && !isViewingStaged;
+
+                // Build className string more cleanly
+                let lineClasses = 'px-4 py-0.5 whitespace-pre transition-colors';
+
+                if (isSelected) {
+                  // Selected state - always blue with consistent styling
+                  lineClasses += ' bg-blue-100 dark:bg-blue-900 border-l-4 border-blue-500 text-blue-900 dark:text-blue-100 font-medium';
+                } else {
+                  // Unselected state
+                  if (line.origin === '+') {
+                    lineClasses += ' bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300';
+                  } else if (line.origin === '-') {
+                    lineClasses += ' bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300';
+                  } else {
+                    lineClasses += ' text-gray-700 dark:text-gray-300';
+                  }
+                }
+
+                if (isAddedLine) {
+                  lineClasses += ' cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/30';
+                }
+
+                return (
+                  <div
+                    key={lineIndex}
+                    onMouseDown={(e) => handleLineMouseDown(hunkIndex, lineIndex, line.origin, e)}
+                    onMouseEnter={() => handleLineMouseEnter(hunkIndex, lineIndex, line.origin)}
+                    className={lineClasses}
+                  >
+                    <span className="inline-block w-4 text-gray-400 select-none">
+                      {line.origin}
+                    </span>
+                    {line.content.trimEnd()}
+                  </div>
+                );
+              })}
             </div>
           </div>
         ))}

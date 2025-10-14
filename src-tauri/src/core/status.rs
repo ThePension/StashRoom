@@ -91,6 +91,7 @@ mod tests {
     use super::*;
     use git2::Repository;
     use std::fs;
+    use std::path::Path;
     use tempfile::TempDir;
 
     fn create_test_repo() -> (TempDir, Repository) {
@@ -106,17 +107,18 @@ mod tests {
             let mut index = repo.index().unwrap();
             index.write_tree().unwrap()
         };
-        let tree = repo.find_tree(tree_id).unwrap();
-
-        repo.commit(
-            Some("HEAD"),
-            &signature,
-            &signature,
-            "Initial commit",
-            &tree,
-            &[],
-        )
-        .unwrap();
+        {
+            let tree = repo.find_tree(tree_id).unwrap();
+            repo.commit(
+                Some("HEAD"),
+                &signature,
+                &signature,
+                "Initial commit",
+                &tree,
+                &[],
+            )
+            .unwrap();
+        }
 
         (temp_dir, repo)
     }

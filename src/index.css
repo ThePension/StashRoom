@@ -19,3 +19,47 @@ body {
 code {
   font-family: 'Courier New', Courier, monospace;
 }
+
+/* Custom Scrollbar Styles */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(156 163 175) rgb(243 244 246); /* gray-400 on gray-100 for light mode */
+}
+
+/* Webkit browsers (Chrome, Safari, Edge) */
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+  background: rgb(243 244 246); /* gray-100 */
+}
+
+*::-webkit-scrollbar-thumb {
+  background: rgb(156 163 175); /* gray-400 */
+  border-radius: 4px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: rgb(107 114 128); /* gray-500 */
+}
+
+/* Dark mode scrollbar using media query */
+@media (prefers-color-scheme: dark) {
+  * {
+    scrollbar-color: rgb(75 85 99) rgb(17 24 39); /* gray-600 on gray-900 */
+  }
+
+  *::-webkit-scrollbar-track {
+    background: rgb(17 24 39); /* gray-900 */
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background: rgb(75 85 99); /* gray-600 */
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background: rgb(107 114 128); /* gray-500 */
+  }
+}

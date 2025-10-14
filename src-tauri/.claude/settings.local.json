@@ -6,7 +6,10 @@
       "Read(//c/DEV/Kite/**)",
       "Bash(npm install:*)",
       "Bash(npx tailwindcss init:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(cargo insta:*)",
+      "Bash(npm run build)",
+      "Bash(npm run dev)"
     ],
     "deny": [],
     "ask": []

@@ -1,0 +1,14 @@
+---
+source: src/core/stage.rs
+expression: patch
+---
+diff --git a/test.txt b/test.txt
+--- a/test.txt
++++ b/test.txt
+@@ -1,4 +1,4 @@
+ line 1
+-line 2
+-line 3
++modified line 2
++modified line 3
+ line 4

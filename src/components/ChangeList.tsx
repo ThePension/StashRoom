@@ -15,7 +15,6 @@ export function ChangeList({ type }: ChangeListProps) {
   const selectedPath = useStore((s) => s.selectedPath);
   const setSelectedPath = useStore((s) => s.setSelectedPath);
   const loadDiff = useStore((s) => s.loadDiff);
-  const refreshStatus = useStore((s) => s.refreshStatus);
   const setIsOperating = useStore((s) => s.setIsOperating);
 
   // Filter entries based on type (memoized to prevent infinite loops)

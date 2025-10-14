@@ -121,19 +121,21 @@ mod tests {
             let mut index = repo.index().unwrap();
             index.write_tree().unwrap()
         };
-        let tree = repo.find_tree(tree_id).unwrap();
+        {
+            let tree = repo.find_tree(tree_id).unwrap();
+            repo.commit(
+                Some("HEAD"),
+                &signature,
+                &signature,
+                "Initial commit",
+                &tree,
+                &[],
+            )
+            .unwrap();
+        }
 
-        repo.commit(
-            Some("HEAD"),
-            &signature,
-            &signature,
-            "Initial commit",
-            &tree,
-            &[],
-        )
-        .unwrap();
-
-        (temp_dir, repo_path.to_string_lossy().to_string())
+        let repo_path_string = repo_path.to_string_lossy().to_string();
+        (temp_dir, repo_path_string)
     }
 
     #[test]

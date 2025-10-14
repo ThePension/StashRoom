@@ -133,7 +133,7 @@ function App() {
 
           {/* Middle Panel - Diff Viewer */}
           <Panel defaultSize={50} minSize={30}>
-            <div className="h-full flex flex-col">
+            <div className="h-full flex flex-col overflow-hidden">
               <DiffPanel />
             </div>
           </Panel>
