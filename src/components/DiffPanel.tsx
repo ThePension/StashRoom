@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 export function DiffPanel() {
   const repo = useStore((s) => s.repo);
   const currentDiff = useStore((s) => s.currentDiff);
+  const currentDiffSide = useStore((s) => s.currentDiffSide);
   const selectedPath = useStore((s) => s.selectedPath);
   const setIsOperating = useStore((s) => s.setIsOperating);
   const [contextMenu, setContextMenu] = useState<{
@@ -16,6 +17,9 @@ export function DiffPanel() {
   } | null>(null);
 
   const editorRef = useRef<any>(null);
+
+  // Determine if we're viewing staged changes based on which diff side we loaded
+  const isViewingStaged = currentDiffSide === 'index';
 
   useEffect(() => {
     const handleClick = () => setContextMenu(null);
@@ -92,6 +96,7 @@ export function DiffPanel() {
         toast.error(response.message || 'Failed to stage hunk');
       }
     } catch (error) {
+      console.error('Error staging hunk:', error);
       toast.error(error instanceof Error ? error.message : 'Unknown error');
     } finally {
       setIsOperating(false);
@@ -183,10 +188,10 @@ export function DiffPanel() {
             <div className="px-4 py-1 bg-blue-50 dark:bg-blue-900/20 text-xs font-mono text-blue-600 dark:text-blue-400 flex items-center justify-between">
               <span>{hunk.header}</span>
               <button
-                onClick={() => handleStageHunk(hunkIndex)}
+                onClick={() => handleStageHunk(hunkIndex, isViewingStaged)}
                 className="px-2 py-0.5 bg-blue-500 text-white rounded text-xs hover:bg-blue-600"
               >
-                Stage Hunk
+                {isViewingStaged ? 'Unstage Hunk' : 'Stage Hunk'}
               </button>
             </div>
 
@@ -222,15 +227,9 @@ export function DiffPanel() {
         >
           <button
             className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700"
-            onClick={() => handleStageHunk(contextMenu.hunkIndex)}
+            onClick={() => handleStageHunk(contextMenu.hunkIndex, isViewingStaged)}
           >
-            Stage Hunk
-          </button>
-          <button
-            className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700"
-            onClick={() => handleStageHunk(contextMenu.hunkIndex, true)}
-          >
-            Unstage Hunk
+            {isViewingStaged ? 'Unstage Hunk' : 'Stage Hunk'}
           </button>
         </div>
       )}

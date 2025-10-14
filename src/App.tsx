@@ -34,29 +34,14 @@ function App() {
     if (!repo) return;
 
     try {
-      const { Command } = await import('@tauri-apps/plugin-shell');
-
-      // Detect platform and open terminal
-      if (navigator.platform.toLowerCase().includes('win')) {
-        // Windows: Open PowerShell or CMD
-        await Command.create('cmd', ['/c', 'start', 'cmd', '/k', `cd /d "${repo.path}"`]).execute();
-      } else if (navigator.platform.toLowerCase().includes('mac')) {
-        // macOS: Open Terminal.app
-        await Command.create('open', ['-a', 'Terminal', repo.path]).execute();
-      } else {
-        // Linux: Try common terminals
-        try {
-          await Command.create('gnome-terminal', ['--working-directory', repo.path]).execute();
-        } catch {
-          try {
-            await Command.create('konsole', ['--workdir', repo.path]).execute();
-          } catch {
-            await Command.create('xterm', ['-e', `cd "${repo.path}" && bash`]).execute();
-          }
-        }
-      }
+      const { open } = await import('@tauri-apps/plugin-shell');
+      // Simply open the folder path - OS will handle with default file manager
+      // User can then open terminal from there
+      await open(repo.path);
     } catch (error) {
-      console.error('Error opening terminal:', error);
+      console.error('Error opening folder:', error);
+      const { toast } = await import('sonner');
+      toast.error('Failed to open folder in file manager.');
     }
   };
 
@@ -113,9 +98,9 @@ function App() {
           <button
             onClick={handleOpenTerminal}
             className="px-3 py-1 text-sm bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600 rounded"
-            title="Open terminal in repository"
+            title="Open repository folder in file manager"
           >
-            Terminal
+            Open Folder
           </button>
           <button
             onClick={handleOpenFolder}

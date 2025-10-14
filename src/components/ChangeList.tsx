@@ -172,10 +172,10 @@ export function ChangeList({ type }: ChangeListProps) {
   }
 
   return (
-    <div className="flex-1 change-list" tabIndex={0}>
+    <div className="flex-1 change-list bg-white dark:bg-gray-900" tabIndex={0} style={{ minHeight: '100px' }}>
       <Virtuoso
         ref={virtuosoRef}
-        style={{ height: '100%' }}
+        style={{ height: '100%', minHeight: '100px' }}
         totalCount={entries.length}
         itemContent={(index) => {
           const entry = entries[index];

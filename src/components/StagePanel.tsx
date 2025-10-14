@@ -52,21 +52,21 @@ export function StagePanel() {
   };
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Staged Changes List */}
-      <div className="flex-1 flex flex-col border-b border-gray-200 dark:border-gray-700">
-        <div className="px-4 py-2 bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
-          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
-            Staged Changes ({stagedEntries.length})
-          </h3>
-        </div>
-        <div className="flex-1 overflow-hidden">
-          <ChangeList type="staged" />
-        </div>
+    <div className="h-full flex flex-col">
+      {/* Header */}
+      <div className="px-4 py-2 bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
+        <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+          Staged Changes ({stagedEntries.length})
+        </h3>
+      </div>
+
+      {/* Staged Changes List - Fixed height area */}
+      <div className="flex-1 overflow-hidden border-b border-gray-200 dark:border-gray-700" style={{ minHeight: '150px' }}>
+        <ChangeList type="staged" />
       </div>
 
       {/* Commit Box */}
-      <div className="p-4 bg-gray-50 dark:bg-gray-900">
+      <div className="p-4 bg-gray-50 dark:bg-gray-900 flex-shrink-0">
         <div className="mb-3">
           <label
             htmlFor="commit-message"

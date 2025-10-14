@@ -27,6 +27,7 @@ interface StatusState {
 
 interface DiffState {
   currentDiff: FileDiff | null;
+  currentDiffSide: 'working' | 'index' | 'head' | null;
   isLoading: boolean;
   loadDiff: (repoId: string, path: string, side: 'working' | 'index' | 'head') => Promise<void>;
   clearDiff: () => void;
@@ -140,26 +141,27 @@ export const useStore = create<AppStore>((set, get) => ({
 
   // Diff state
   currentDiff: null,
+  currentDiffSide: null,
 
   loadDiff: async (repoId: string, path: string, side: 'working' | 'index' | 'head') => {
     set({ isLoading: true });
     try {
       const response = await api.getDiff({ repoId, path, side });
       if (response.ok && response.data) {
-        set({ currentDiff: response.data, isLoading: false });
+        set({ currentDiff: response.data, currentDiffSide: side, isLoading: false });
       } else {
         toast.error(response.message || 'Failed to load diff');
-        set({ isLoading: false, currentDiff: null });
+        set({ isLoading: false, currentDiff: null, currentDiffSide: null });
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
       toast.error(message);
-      set({ isLoading: false, currentDiff: null });
+      set({ isLoading: false, currentDiff: null, currentDiffSide: null });
     }
   },
 
   clearDiff: () => {
-    set({ currentDiff: null });
+    set({ currentDiff: null, currentDiffSide: null });
   },
 
   // Selection state

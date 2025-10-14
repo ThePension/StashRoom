@@ -9,6 +9,7 @@
     "dialog:allow-open",
     "dialog:default",
     "shell:allow-execute",
+    "shell:allow-open",
     "shell:default"
   ]
 }
