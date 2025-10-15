@@ -85,7 +85,7 @@ function App() {
         <Toaster position="bottom-right" />
         <div className="text-center">
           <h1 className="text-3xl font-bold text-gray-800 dark:text-gray-100 mb-4">
-            Kite
+            StashRoom
           </h1>
           <p className="text-gray-600 dark:text-gray-400 mb-8">
             A modern Git client
@@ -116,7 +116,7 @@ function App() {
       <header className="flex items-center justify-between px-4 py-3 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
         <div className="flex items-center gap-4">
           <h1 className="text-xl font-bold text-gray-800 dark:text-gray-100">
-            Kite
+            StashRoom
           </h1>
           <div className="text-sm text-gray-600 dark:text-gray-400">
             <span className="font-mono">{repo.path}</span>

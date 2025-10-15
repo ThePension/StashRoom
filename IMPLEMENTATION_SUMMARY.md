@@ -1,8 +1,8 @@
-# Kite - Full-Stack Implementation Summary
+# StashRoom - Full-Stack Implementation Summary
 
 ## Project Overview
 
-**Kite** is a modern, desktop Git client built with Rust (Tauri) + React + TypeScript. It features a three-panel interface for viewing changes, staging hunks/files, and committing.
+**StashRoom** is a modern, desktop Git client built with Rust (Tauri) + React + TypeScript. It features a three-panel interface for viewing changes, staging hunks/files, and committing.
 
 ## Tech Stack
 
@@ -57,7 +57,7 @@ React Re-renders
 ### File Structure
 
 ```
-Kite/
+StashRoom/
 ├── src-tauri/                  # Rust backend
 │   ├── src/
 │   │   ├── core/

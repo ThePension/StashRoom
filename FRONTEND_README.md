@@ -1,8 +1,8 @@
-# Kite Frontend Implementation
+# StashRoom Frontend Implementation
 
 ## Overview
 
-A complete React + TypeScript frontend for the Kite Git client, featuring a modern three-panel layout with Zustand state management, virtualized lists, and Monaco-based diff viewing.
+A complete React + TypeScript frontend for the StashRoom Git client, featuring a modern three-panel layout with Zustand state management, virtualized lists, and Monaco-based diff viewing.
 
 ## Architecture
 

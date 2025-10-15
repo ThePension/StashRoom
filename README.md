@@ -1,4 +1,4 @@
-# Kite 🪁
+# StashRoom
 
 A modern desktop Git client built with Rust (Tauri) + React + TypeScript.
 
@@ -38,7 +38,7 @@ See [QUICKSTART.md](./QUICKSTART.md) for detailed instructions.
 ### Main Interface
 ```
 ┌─────────────────────────────────────────────────────────┐
-│ Kite                  /path/to/repo       [main] Change │
+│ StashRoom             /path/to/repo       [main] Change │
 ├─────────────┬──────────────────────┬────────────────────┤
 │  Changes    │                      │  Staged Changes    │
 │             │                      │                    │
@@ -118,7 +118,7 @@ See [QUICKSTART.md](./QUICKSTART.md) for detailed instructions.
 ## Project Structure
 
 ```
-Kite/
+StashRoom/
 ├── src/                        # React frontend
 │   ├── lib/
 │   │   ├── types.ts           # TypeScript types

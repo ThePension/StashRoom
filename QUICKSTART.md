@@ -1,4 +1,4 @@
-# Kite - Quick Start Guide
+# StashRoom - Quick Start Guide
 
 ## Prerequisites
 
@@ -29,7 +29,7 @@ npm run tauri dev
 This will:
 1. Build the Rust backend
 2. Start the Vite development server
-3. Open the Kite application window
+3. Open the StashRoom application window
 
 First launch may take a few minutes to compile Rust dependencies.
 
@@ -40,9 +40,9 @@ npm run tauri build
 ```
 
 The executable will be created in:
-- Windows: `src-tauri\target\release\kite.exe`
-- macOS: `src-tauri/target/release/bundle/macos/kite.app`
-- Linux: `src-tauri/target/release/kite`
+- Windows: `src-tauri\target\release\StashRoom.exe`
+- macOS: `src-tauri/target/release/bundle/macos/StashRoom.app`
+- Linux: `src-tauri/target/release/StashRoom`
 
 ## First Run
 
@@ -118,15 +118,15 @@ If you don't have a Git repository handy:
 mkdir test-repo
 cd test-repo
 git init
-echo "Hello, Kite!" > README.md
+echo "Hello, StashRoom!" > README.md
 git add README.md
 git commit -m "Initial commit"
 
 # Make some changes
-echo "Testing Kite features" >> README.md
+echo "Testing StashRoom features" >> README.md
 echo "Another file" > test.txt
 
-# Open test-repo in Kite
+# Open test-repo in StashRoom
 ```
 
 You should see:
@@ -251,6 +251,6 @@ After trying the basic features:
 - All code includes inline documentation
 - Unit tests in `src-tauri/src/core/*_tests`
 
-## Enjoy using Kite! 🪁
+## Enjoy using StashRoom!
 
 A modern Git client built with Rust + React + TypeScript.
