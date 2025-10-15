@@ -233,8 +233,6 @@ export function DiffPanel() {
     setContextMenu(null);
 
     try {
-      console.log(unstage ? 'Unstaging lines:' : 'Staging lines:', { hunkIndex, lineIndices, path: selectedPath });
-
       const response = await api.stageLines({
         repoId: repo.repoId,
         path: selectedPath,
@@ -242,8 +240,6 @@ export function DiffPanel() {
         lineIndices,
         unstage,
       });
-
-      console.log('Stage lines response:', response);
 
       if (response.ok && response.data) {
         useStore.getState().updateStatus(response.data);
@@ -264,11 +260,9 @@ export function DiffPanel() {
           useStore.getState().clearDiff();
         }
       } else {
-        console.error('Stage lines failed:', response);
         toast.error(response.message || (unstage ? 'Failed to unstage lines' : 'Failed to stage lines'));
       }
     } catch (error) {
-      console.error('Stage lines error:', error);
       toast.error(error instanceof Error ? error.message : 'Unknown error');
     } finally {
       setIsOperating(false);
