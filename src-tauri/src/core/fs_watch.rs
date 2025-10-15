@@ -130,13 +130,35 @@ impl EventCollector {
     }
 
     fn handle_event(&self, event: Event, repo_id: &str, repo_path: &Path) {
-        // Filter out .git directory events
+        // Check if this is a .git/index or .git/HEAD change (staging/branch change)
+        let is_git_metadata = event.paths.iter().any(|p| {
+            let rel_path = p.strip_prefix(repo_path).ok();
+            rel_path.map_or(false, |rel| {
+                let path_str = rel.to_string_lossy();
+                path_str.starts_with(".git/index")
+                    || path_str.starts_with(".git/HEAD")
+                    || path_str.starts_with(".git/refs/")
+                    || path_str.starts_with(".git/ORIG_HEAD")
+            })
+        });
+
+        // Filter out other .git directory events (but keep index, HEAD, refs)
         let paths: Vec<PathBuf> = event
             .paths
             .into_iter()
             .filter(|p| {
-                !p.components()
-                    .any(|c| c.as_os_str().to_string_lossy() == ".git")
+                let rel_path = p.strip_prefix(repo_path).ok();
+                if let Some(rel) = rel_path {
+                    let path_str = rel.to_string_lossy();
+                    // Allow .git/index, .git/HEAD, .git/refs, but block other .git files
+                    !path_str.starts_with(".git/")
+                        || path_str.starts_with(".git/index")
+                        || path_str.starts_with(".git/HEAD")
+                        || path_str.starts_with(".git/refs/")
+                        || path_str.starts_with(".git/ORIG_HEAD")
+                } else {
+                    false
+                }
             })
             .filter_map(|p| {
                 // Convert to relative path
@@ -144,15 +166,20 @@ impl EventCollector {
             })
             .collect();
 
-        if paths.is_empty() {
+        if paths.is_empty() && !is_git_metadata {
             return;
         }
 
-        let event_type = match event.kind {
-            EventKind::Create(_) => "created",
-            EventKind::Modify(_) => "modified",
-            EventKind::Remove(_) => "deleted",
-            _ => "modified", // Default to modified
+        // Determine event type - use "repo-changed" for git metadata
+        let event_type = if is_git_metadata {
+            "repo-changed"
+        } else {
+            match event.kind {
+                EventKind::Create(_) => "created",
+                EventKind::Modify(_) => "modified",
+                EventKind::Remove(_) => "deleted",
+                _ => "modified", // Default to modified
+            }
         };
 
         let mut events = self.events.lock().unwrap();

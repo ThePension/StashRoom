@@ -48,7 +48,7 @@ function App() {
   if (!repo) {
     return (
       <div className="h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
-        <Toaster position="top-right" />
+        <Toaster position="bottom-right" />
         <div className="text-center">
           <h1 className="text-3xl font-bold text-gray-800 dark:text-gray-100 mb-4">
             Kite
@@ -70,7 +70,7 @@ function App() {
 
   return (
     <div className="h-screen flex flex-col bg-white dark:bg-gray-900">
-      <Toaster position="top-right" />
+      <Toaster position="bottom-right" />
       <KeyboardShortcutsHelp />
 
       {/* Progress Bar */}

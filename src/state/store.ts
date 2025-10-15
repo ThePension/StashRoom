@@ -19,7 +19,7 @@ interface RepoState {
 interface StatusState {
   entries: StatusEntry[];
   isLoading: boolean;
-  refreshStatus: (repoId: string) => Promise<void>;
+  refreshStatus: (repoId: string, silent?: boolean) => Promise<void>;
   updateStatus: (status: StatusMatrix) => void;
   getStagedEntries: () => StatusEntry[];
   getUnstagedEntries: () => StatusEntry[];
@@ -72,9 +72,33 @@ export const useStore = create<AppStore>((set, get) => ({
         // Subscribe to watch events
         await api.subscribeWatch(response.data.repoId);
         // Listen for watch events
-        api.onWatchEvent((event) => {
+        api.onWatchEvent(async (event) => {
           if (event.repoId === get().repo?.repoId) {
-            get().refreshStatus(event.repoId);
+            // Refresh status silently (no loading indicator) to avoid flicker
+            await get().refreshStatus(event.repoId, true);
+
+            // If a file is currently selected, reload its diff to keep it in sync
+            const state = get();
+            if (state.selectedPath && state.currentDiffSide) {
+              // Check if the selected file still exists in the new status
+              const fileStillExists = state.entries.some(e => e.path === state.selectedPath);
+
+              if (fileStillExists) {
+                // Silently reload the diff for the currently selected file
+                const response = await api.getDiff({
+                  repoId: event.repoId,
+                  path: state.selectedPath,
+                  side: state.currentDiffSide,
+                });
+
+                if (response.ok && response.data) {
+                  set({ currentDiff: response.data });
+                }
+              } else {
+                // File was deleted or no longer has changes, clear the diff
+                state.clearDiff();
+              }
+            }
           }
         });
         toast.success(`Opened repository: ${path}`);
@@ -108,19 +132,27 @@ export const useStore = create<AppStore>((set, get) => ({
   // Status state
   entries: [],
 
-  refreshStatus: async (repoId: string) => {
-    set({ isLoading: true });
+  refreshStatus: async (repoId: string, silent: boolean = false) => {
+    // Only show loading indicator if not a silent/automatic refresh
+    if (!silent) {
+      set({ isLoading: true });
+    }
+
     try {
       const response = await api.getStatus(repoId);
       if (response.ok && response.data) {
         set({ entries: response.data.entries, isLoading: false });
       } else {
-        toast.error(response.message || 'Failed to refresh status');
+        if (!silent) {
+          toast.error(response.message || 'Failed to refresh status');
+        }
         set({ isLoading: false });
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
-      toast.error(message);
+      if (!silent) {
+        toast.error(message);
+      }
       set({ isLoading: false });
     }
   },

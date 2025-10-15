@@ -3,6 +3,7 @@ import { Virtuoso } from 'react-virtuoso';
 import { useStore } from '../state/store';
 import { api } from '../lib/api';
 import { toast } from 'sonner';
+import { useConfirm } from '../hooks/useConfirm';
 import type { StatusEntry } from '../lib/types';
 
 interface ChangeListProps {
@@ -16,6 +17,7 @@ export function ChangeList({ type }: ChangeListProps) {
   const setSelectedPath = useStore((s) => s.setSelectedPath);
   const loadDiff = useStore((s) => s.loadDiff);
   const setIsOperating = useStore((s) => s.setIsOperating);
+  const { confirm, ConfirmDialog } = useConfirm();
 
   // Filter entries based on type (memoized to prevent infinite loops)
   const entries = useMemo(() => {
@@ -31,9 +33,13 @@ export function ChangeList({ type }: ChangeListProps) {
   );
 
   const confirmAndDiscard = async (entry: StatusEntry) => {
-    const confirmed = await window.confirm(
-      `Are you sure you want to discard changes to "${entry.path}"? This cannot be undone (but a backup will be created).`
-    );
+    const confirmed = await confirm({
+      title: 'Discard Changes',
+      message: `Are you sure you want to discard changes to "${entry.path}"? This cannot be undone (but a backup will be created).`,
+      confirmText: 'Discard',
+      cancelText: 'Cancel',
+      variant: 'danger',
+    });
 
     if (confirmed) {
       handleDiscard(entry);
@@ -175,8 +181,10 @@ export function ChangeList({ type }: ChangeListProps) {
   }
 
   return (
-    <div className="flex-1 change-list bg-white dark:bg-gray-900" tabIndex={0} style={{ minHeight: '100px' }}>
-      <Virtuoso
+    <>
+      <ConfirmDialog />
+      <div className="flex-1 change-list bg-white dark:bg-gray-900" tabIndex={0} style={{ minHeight: '100px' }}>
+        <Virtuoso
         ref={virtuosoRef}
         style={{ height: '100%', minHeight: '100px' }}
         totalCount={entries.length}
@@ -230,6 +238,7 @@ export function ChangeList({ type }: ChangeListProps) {
           );
         }}
       />
-    </div>
+      </div>
+    </>
   );
 }
