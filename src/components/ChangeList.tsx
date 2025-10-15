@@ -183,10 +183,10 @@ export function ChangeList({ type }: ChangeListProps) {
   return (
     <>
       <ConfirmDialog />
-      <div className="flex-1 change-list bg-white dark:bg-gray-900" tabIndex={0} style={{ minHeight: '100px' }}>
+      <div className="h-full change-list bg-white dark:bg-gray-900" tabIndex={0}>
         <Virtuoso
         ref={virtuosoRef}
-        style={{ height: '100%', minHeight: '100px' }}
+        style={{ height: '100%' }}
         totalCount={entries.length}
         itemContent={(index) => {
           const entry = entries[index];

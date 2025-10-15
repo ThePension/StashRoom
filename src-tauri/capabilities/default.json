@@ -10,6 +10,37 @@
     "dialog:default",
     "shell:allow-execute",
     "shell:allow-open",
-    "shell:default"
+    "shell:default",
+    "os:default",
+    {
+      "identifier": "shell:allow-execute",
+      "allow": [
+        {
+          "name": "explorer",
+          "cmd": "explorer",
+          "args": true
+        },
+        {
+          "name": "cmd",
+          "cmd": "cmd",
+          "args": true
+        },
+        {
+          "name": "xdg-open",
+          "cmd": "xdg-open",
+          "args": true
+        },
+        {
+          "name": "gnome-terminal",
+          "cmd": "gnome-terminal",
+          "args": true
+        },
+        {
+          "name": "x-terminal-emulator",
+          "cmd": "x-terminal-emulator",
+          "args": true
+        }
+      ]
+    }
   ]
 }

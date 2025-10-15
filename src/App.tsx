@@ -12,7 +12,7 @@ function App() {
   const isOperating = useStore((s) => s.isOperating);
   const openRepo = useStore((s) => s.openRepo);
 
-  const handleOpenFolder = async () => {
+  const handleSelectRepo = async () => {
     try {
       // Use Tauri dialog to select folder
       const { open: tauriOpen } = await import('@tauri-apps/plugin-dialog');
@@ -30,18 +30,52 @@ function App() {
     }
   };
 
-  const handleOpenTerminal = async () => {
+  const handleOpenFolder = async () => {
     if (!repo) return;
 
     try {
-      const { open } = await import('@tauri-apps/plugin-shell');
-      // Simply open the folder path - OS will handle with default file manager
-      // User can then open terminal from there
-      await open(repo.path);
+      const { Command } = await import('@tauri-apps/plugin-shell');
+      const { platform } = await import('@tauri-apps/plugin-os');
+      const currentPlatform = platform();
+
+      if (currentPlatform === 'windows') {
+        // Windows: Use explorer
+        await Command.create('explorer', [repo.path]).execute();
+      } else {
+        // Linux: Use xdg-open
+        await Command.create('xdg-open', [repo.path]).execute();
+      }
     } catch (error) {
       console.error('Error opening folder:', error);
       const { toast } = await import('sonner');
       toast.error('Failed to open folder in file manager.');
+    }
+  };
+
+  const handleOpenTerminal = async () => {
+    if (!repo) return;
+
+    try {
+      const { Command } = await import('@tauri-apps/plugin-shell');
+      const { platform } = await import('@tauri-apps/plugin-os');
+      const currentPlatform = platform();
+
+      if (currentPlatform === 'windows') {
+        // Windows: Use cmd with start to open a new terminal window
+        await Command.create('cmd', ['/c', 'start', 'cmd', '/k', 'cd', '/d', repo.path]).execute();
+      } else {
+        // Linux: Try gnome-terminal first, fall back to x-terminal-emulator
+        try {
+          await Command.create('gnome-terminal', ['--working-directory', repo.path]).execute();
+        } catch {
+          // Fall back to generic x-terminal-emulator
+          await Command.create('x-terminal-emulator', ['-e', `bash -c "cd '${repo.path}' && exec bash"`]).execute();
+        }
+      }
+    } catch (error) {
+      console.error('Error opening terminal:', error);
+      const { toast } = await import('sonner');
+      toast.error('Failed to open terminal.');
     }
   };
 
@@ -57,7 +91,7 @@ function App() {
             A modern Git client
           </p>
           <button
-            onClick={handleOpenFolder}
+            onClick={handleSelectRepo}
             disabled={isLoading}
             className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 font-medium"
           >
@@ -96,14 +130,21 @@ function App() {
             </div>
           )}
           <button
-            onClick={handleOpenTerminal}
+            onClick={handleOpenFolder}
             className="px-3 py-1 text-sm bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600 rounded"
             title="Open repository folder in file manager"
           >
             Open Folder
           </button>
           <button
-            onClick={handleOpenFolder}
+            onClick={handleOpenTerminal}
+            className="px-3 py-1 text-sm bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600 rounded"
+            title="Open terminal at repository location"
+          >
+            Terminal
+          </button>
+          <button
+            onClick={handleSelectRepo}
             className="px-3 py-1 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
           >
             Change Repo
