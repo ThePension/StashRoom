@@ -22,6 +22,7 @@ pub fn run() {
             bridge::stage_file,
             bridge::unstage_file,
             bridge::discard,
+            bridge::delete_file,
             bridge::commit,
             bridge::subscribe_watch,
             bridge::unsubscribe_watch,

@@ -47,6 +47,20 @@ export function ChangeList({ type }: ChangeListProps) {
     }
   };
 
+  const confirmAndDelete = async (entry: StatusEntry) => {
+    const confirmed = await confirm({
+      title: 'Delete File',
+      message: `Are you sure you want to delete "${entry.path}"? This file will be permanently removed from the filesystem.`,
+      confirmText: 'Delete',
+      cancelText: 'Cancel',
+      variant: 'danger',
+    });
+
+    if (confirmed) {
+      handleDelete(entry);
+    }
+  };
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!entries.length || !document.activeElement?.closest('.change-list')) return;
@@ -89,7 +103,8 @@ export function ChangeList({ type }: ChangeListProps) {
         case 'D':
           e.preventDefault();
           if (selectedPath && repo && type === 'unstaged') {
-            confirmAndDiscard(entries[selectedIndex]);
+            const entry = entries[selectedIndex];
+            entry.untracked ? confirmAndDelete(entry) : confirmAndDiscard(entry);
           }
           break;
       }
@@ -152,6 +167,27 @@ export function ChangeList({ type }: ChangeListProps) {
         toast.success(`Discarded changes to ${entry.path}`);
       } else {
         toast.error(response.message || 'Failed to discard changes');
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unknown error');
+    } finally {
+      setIsOperating(false);
+    }
+  };
+
+  const handleDelete = async (entry: StatusEntry) => {
+    if (!repo) return;
+
+    setIsOperating(true);
+    try {
+      const response = await api.deleteFile(repo.repoId, entry.path);
+
+      if (response.ok && response.data) {
+        useStore.getState().updateStatus(response.data);
+        useStore.getState().clearDiff();
+        toast.success(`Deleted ${entry.path}`);
+      } else {
+        toast.error(response.message || 'Failed to delete file');
       }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Unknown error');
@@ -227,10 +263,11 @@ export function ChangeList({ type }: ChangeListProps) {
                       onClick={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
-                        confirmAndDiscard(entry);
+                        // Use delete for untracked files, discard for modified files
+                        entry.untracked ? confirmAndDelete(entry) : confirmAndDiscard(entry);
                       }}
                       className="px-2 py-0.5 text-xs rounded bg-red-500 text-white hover:bg-red-600 flex-shrink-0"
-                      title="Discard changes"
+                      title={entry.untracked ? 'Delete file' : 'Discard changes'}
                     >
                       ✕
                     </button>

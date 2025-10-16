@@ -84,6 +84,13 @@ class GitAPI {
   }
 
   /**
+   * Deletes a file from the filesystem
+   */
+  async deleteFile(repoId: string, path: string): Promise<ApiResponse<StatusMatrix>> {
+    return invoke<ApiResponse<StatusMatrix>>('delete_file', { repoId, path });
+  }
+
+  /**
    * Creates a commit with staged changes
    */
   async commit(request: CommitRequest): Promise<ApiResponse<CommitResponse>> {

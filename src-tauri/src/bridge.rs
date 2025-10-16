@@ -176,6 +176,41 @@ pub fn discard(request: DiscardRequest, state: State<AppState>) -> ApiResponse<S
 }
 
 // ============================================================================
+// Delete Commands
+// ============================================================================
+
+#[tauri::command]
+pub fn delete_file(
+    repo_id: String,
+    path: String,
+    state: State<AppState>,
+) -> ApiResponse<StatusMatrix> {
+    let repo = match state.repo_registry.get_repo(&repo_id) {
+        Ok(r) => r,
+        Err(e) => return ApiResponse::error("REPO_NOT_FOUND".to_string(), e.to_string()),
+    };
+
+    let workdir = match repo.workdir() {
+        Some(w) => w,
+        None => return ApiResponse::error("NO_WORKDIR".to_string(), "Repository has no working directory".to_string()),
+    };
+
+    let file_path = workdir.join(&path);
+
+    // Delete the file from filesystem
+    match std::fs::remove_file(&file_path) {
+        Ok(_) => {},
+        Err(e) => return ApiResponse::error("DELETE_ERROR".to_string(), format!("Failed to delete file: {}", e)),
+    }
+
+    // Get updated status
+    match status::get_status(&repo) {
+        Ok(status) => ApiResponse::success(status),
+        Err(e) => ApiResponse::error("STATUS_ERROR".to_string(), e.to_string()),
+    }
+}
+
+// ============================================================================
 // Commit Commands
 // ============================================================================
 
