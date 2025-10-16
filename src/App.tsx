@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { Toaster } from 'sonner';
 import { useStore } from './state/store';
@@ -5,12 +6,14 @@ import { ChangeList } from './components/ChangeList';
 import { DiffPanel } from './components/DiffPanel';
 import { StagePanel } from './components/StagePanel';
 import { KeyboardShortcutsHelp } from './components/KeyboardShortcutsHelp';
+import { HistoryPanel } from './components/HistoryPanel';
 
 function App() {
   const repo = useStore((s) => s.repo);
   const isLoading = useStore((s) => s.isLoading);
   const isOperating = useStore((s) => s.isOperating);
   const openRepo = useStore((s) => s.openRepo);
+  const [showHistory, setShowHistory] = useState(false);
 
   const handleSelectRepo = async () => {
     try {
@@ -155,18 +158,46 @@ function App() {
       {/* Main Content */}
       <div className="flex-1 overflow-hidden">
         <PanelGroup direction="horizontal">
-          {/* Left Panel - Unstaged Changes */}
+          {/* Left Panel - Changes / History */}
           <Panel defaultSize={25} minSize={15}>
             <div className="h-full flex flex-col border-r border-gray-200 dark:border-gray-700">
+              {/* Tab Header */}
               <div className="px-4 py-2 bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
-                <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
-                  Changes
-                </h3>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                  ↑↓ navigate • Enter view • S stage • D discard
-                </p>
+                <div className="flex items-center gap-2 mb-1">
+                  <button
+                    onClick={() => setShowHistory(false)}
+                    className={`px-3 py-1 text-sm rounded ${
+                      !showHistory
+                        ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 font-semibold'
+                        : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'
+                    }`}
+                  >
+                    Changes
+                  </button>
+                  <button
+                    onClick={() => setShowHistory(true)}
+                    className={`px-3 py-1 text-sm rounded ${
+                      showHistory
+                        ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 font-semibold'
+                        : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'
+                    }`}
+                  >
+                    History
+                  </button>
+                </div>
+                {!showHistory ? (
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    ↑↓ navigate • Enter view • S stage • D discard
+                  </p>
+                ) : (
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    Click commit to view diff
+                  </p>
+                )}
               </div>
-              <ChangeList type="unstaged" />
+
+              {/* Content */}
+              {!showHistory ? <ChangeList type="unstaged" /> : <HistoryPanel />}
             </div>
           </Panel>
 

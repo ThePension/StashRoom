@@ -300,11 +300,6 @@ fn build_reverse_patch(path: &str, hunk: &crate::types::DiffHunk) -> Result<Stri
 
 /// Applies a patch to the index using libgit2
 fn apply_patch_to_index(repo: &Repository, patch: &str) -> Result<()> {
-    // Log the patch for debugging
-    eprintln!("=== PATCH TO APPLY ===");
-    eprintln!("{}", patch);
-    eprintln!("=== END PATCH ===");
-
     // Create a diff from the patch string
     let diff = Diff::from_buffer(patch.as_bytes()).context("Failed to parse patch")?;
 

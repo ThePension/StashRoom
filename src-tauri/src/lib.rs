@@ -25,6 +25,8 @@ pub fn run() {
             bridge::commit,
             bridge::subscribe_watch,
             bridge::unsubscribe_watch,
+            bridge::get_log,
+            bridge::get_commit_diff,
             bridge::list_backups,
             bridge::restore_from_backup,
         ])

@@ -17,7 +17,9 @@ pub struct WatchManager {
 
 struct RepoWatcher {
     _watcher: RecommendedWatcher,
+    #[allow(dead_code)]
     repo_id: String,
+    #[allow(dead_code)]
     repo_path: PathBuf,
 }
 

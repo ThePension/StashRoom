@@ -16,6 +16,7 @@ export function ChangeList({ type }: ChangeListProps) {
   const selectedPath = useStore((s) => s.selectedPath);
   const setSelectedPath = useStore((s) => s.setSelectedPath);
   const loadDiff = useStore((s) => s.loadDiff);
+  const selectCommitFile = useStore((s) => s.selectCommitFile);
   const setIsOperating = useStore((s) => s.setIsOperating);
   const { confirm, ConfirmDialog } = useConfirm();
 
@@ -99,6 +100,8 @@ export function ChangeList({ type }: ChangeListProps) {
   }, [entries, selectedIndex, selectedPath, repo, type]);
 
   const handleSelect = (entry: StatusEntry) => {
+    // Clear commit file selection when switching to working tree changes
+    selectCommitFile(null);
     setSelectedPath(entry.path);
     if (repo) {
       loadDiff(repo.repoId, entry.path, type === 'unstaged' ? 'working' : 'index');

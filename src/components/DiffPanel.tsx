@@ -8,6 +8,7 @@ export function DiffPanel() {
   const currentDiff = useStore((s) => s.currentDiff);
   const currentDiffSide = useStore((s) => s.currentDiffSide);
   const selectedPath = useStore((s) => s.selectedPath);
+  const selectedCommitFile = useStore((s) => s.selectedCommitFile);
   const setIsOperating = useStore((s) => s.setIsOperating);
   const [contextMenu, setContextMenu] = useState<{
     x: number;
@@ -22,6 +23,8 @@ export function DiffPanel() {
   // Track drag state
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState<{ hunkIndex: number; lineIndex: number } | null>(null);
+  // Track line wrap preference
+  const [wrapLines, setWrapLines] = useState(false);
 
   // Determine if we're viewing staged changes based on which diff side we loaded
   const isViewingStaged = currentDiffSide === 'index';
@@ -50,23 +53,27 @@ export function DiffPanel() {
     return () => window.removeEventListener('click', handleClick);
   }, []);
 
-  if (!currentDiff) {
+  // Determine which diff to display: commit file diff or working tree diff
+  const displayDiff = selectedCommitFile || currentDiff;
+  const isCommitDiff = !!selectedCommitFile;
+
+  if (!displayDiff) {
     return (
       <div className="flex-1 flex items-center justify-center text-gray-400">
         <div className="text-center">
           <p className="text-lg mb-2">No file selected</p>
-          <p className="text-sm">Select a file from the change list to view its diff</p>
+          <p className="text-sm">Select a file from the change list or commit history to view its diff</p>
         </div>
       </div>
     );
   }
 
-  if (currentDiff.isBinary) {
+  if (displayDiff.isBinary) {
     return (
       <div className="flex-1 flex items-center justify-center text-gray-400">
         <div className="text-center">
           <p className="text-lg mb-2">Binary File</p>
-          <p className="text-sm">{currentDiff.path}</p>
+          <p className="text-sm">{displayDiff.path}</p>
         </div>
       </div>
     );
@@ -269,6 +276,26 @@ export function DiffPanel() {
     }
   };
 
+  // Helper to get change type badge
+  const getChangeBadge = () => {
+    if (isCommitDiff && selectedCommitFile) {
+      const changeColors = {
+        Added: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300',
+        Deleted: 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300',
+        Modified: 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300',
+        Renamed: 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300',
+        Copied: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900 dark:text-cyan-300',
+      };
+      const color = changeColors[selectedCommitFile.change as keyof typeof changeColors] || 'bg-gray-100 text-gray-700';
+      return (
+        <span className={`text-xs px-2 py-0.5 rounded ${color}`}>
+          {selectedCommitFile.change}
+        </span>
+      );
+    }
+    return null;
+  };
+
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
@@ -276,71 +303,89 @@ export function DiffPanel() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="text-sm font-mono text-gray-600 dark:text-gray-400">
-              {currentDiff.path}
+              {displayDiff.path}
             </span>
-            {currentDiff.isNew && (
+            {!isCommitDiff && currentDiff?.isNew && (
               <span className="text-xs px-2 py-0.5 bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 rounded">
                 New
               </span>
             )}
-            {currentDiff.isDeleted && (
+            {!isCommitDiff && currentDiff?.isDeleted && (
               <span className="text-xs px-2 py-0.5 bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300 rounded">
                 Deleted
               </span>
             )}
+            {getChangeBadge()}
           </div>
-          <div className="text-xs text-gray-500 dark:text-gray-400">
-            {currentDiff.hunks.length} hunk(s)
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setWrapLines(!wrapLines)}
+              className="text-xs px-2 py-1 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600 rounded"
+              title={wrapLines ? 'Disable line wrapping' : 'Enable line wrapping'}
+            >
+              {wrapLines ? 'Unwrap' : 'Wrap'}
+            </button>
+            <div className="text-xs text-gray-500 dark:text-gray-400">
+              {displayDiff.hunks?.length || 0} hunk(s)
+            </div>
           </div>
         </div>
       </div>
 
       {/* Hunk-based view */}
       <div className="flex-1 overflow-auto">
-        {currentDiff.hunks.map((hunk, hunkIndex) => (
+        {displayDiff.hunks?.map((hunk, hunkIndex) => (
           <div
             key={hunkIndex}
             className="border-b border-gray-200 dark:border-gray-700"
-            onContextMenu={(e) => handleContextMenu(e, hunkIndex)}
+            onContextMenu={!isCommitDiff ? (e) => handleContextMenu(e, hunkIndex) : undefined}
           >
             {/* Hunk header */}
             <div className="px-4 py-1 bg-blue-50 dark:bg-blue-900/20 text-xs font-mono text-blue-600 dark:text-blue-400 flex items-center justify-between">
               <span>{hunk.header}</span>
-              <div className="flex items-center gap-2">
-                {selectedLines.get(hunkIndex)?.size ? (
+              {!isCommitDiff && (
+                <div className="flex items-center gap-2">
+                  {selectedLines.get(hunkIndex)?.size ? (
+                    <button
+                      onClick={() => handleStageSelectedLines(hunkIndex)}
+                      className="px-2 py-0.5 bg-green-500 text-white rounded text-xs hover:bg-green-600"
+                    >
+                      {isViewingStaged ? 'Unstage' : 'Stage'} {selectedLines.get(hunkIndex)?.size} Line(s)
+                    </button>
+                  ) : null}
                   <button
-                    onClick={() => handleStageSelectedLines(hunkIndex)}
-                    className="px-2 py-0.5 bg-green-500 text-white rounded text-xs hover:bg-green-600"
+                    onClick={() => handleStageHunk(hunkIndex, isViewingStaged)}
+                    className="px-2 py-0.5 bg-blue-500 text-white rounded text-xs hover:bg-blue-600"
                   >
-                    {isViewingStaged ? 'Unstage' : 'Stage'} {selectedLines.get(hunkIndex)?.size} Line(s)
+                    {isViewingStaged ? 'Unstage Hunk' : 'Stage Hunk'}
                   </button>
-                ) : null}
-                <button
-                  onClick={() => handleStageHunk(hunkIndex, isViewingStaged)}
-                  className="px-2 py-0.5 bg-blue-500 text-white rounded text-xs hover:bg-blue-600"
-                >
-                  {isViewingStaged ? 'Unstage Hunk' : 'Stage Hunk'}
-                </button>
-              </div>
+                </div>
+              )}
             </div>
 
             {/* Hunk lines */}
             <div className="font-mono text-xs select-none">
               {hunk.lines.map((line, lineIndex) => {
+                // Handle both FileDiff (working tree) and CommitFileDiff (history) line types
+                const origin = isCommitDiff
+                  ? ((line as any).type === 'add' ? '+' : (line as any).type === 'del' ? '-' : ' ')
+                  : (line as any).origin;
+                const content = isCommitDiff ? (line as any).text : (line as any).content;
+
                 const isSelected = selectedLines.get(hunkIndex)?.has(lineIndex);
-                const isAddedLine = line.origin === '+' && !isViewingStaged;
+                const isAddedLine = origin === '+' && !isViewingStaged && !isCommitDiff;
 
                 // Build className string more cleanly
-                let lineClasses = 'px-4 py-0.5 whitespace-pre transition-colors';
+                let lineClasses = `px-4 py-0.5 ${wrapLines ? 'whitespace-pre-wrap break-all' : 'whitespace-pre'} transition-colors`;
 
-                if (isSelected) {
+                if (isSelected && !isCommitDiff) {
                   // Selected state - always blue with consistent styling
                   lineClasses += ' bg-blue-100 dark:bg-blue-900 border-l-4 border-blue-500 text-blue-900 dark:text-blue-100 font-medium';
                 } else {
                   // Unselected state
-                  if (line.origin === '+') {
+                  if (origin === '+') {
                     lineClasses += ' bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300';
-                  } else if (line.origin === '-') {
+                  } else if (origin === '-') {
                     lineClasses += ' bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300';
                   } else {
                     lineClasses += ' text-gray-700 dark:text-gray-300';
@@ -354,14 +399,14 @@ export function DiffPanel() {
                 return (
                   <div
                     key={lineIndex}
-                    onMouseDown={(e) => handleLineMouseDown(hunkIndex, lineIndex, line.origin, e)}
-                    onMouseEnter={() => handleLineMouseEnter(hunkIndex, lineIndex, line.origin)}
+                    onMouseDown={!isCommitDiff ? (e) => handleLineMouseDown(hunkIndex, lineIndex, origin, e) : undefined}
+                    onMouseEnter={!isCommitDiff ? () => handleLineMouseEnter(hunkIndex, lineIndex, origin) : undefined}
                     className={lineClasses}
                   >
                     <span className="inline-block w-4 text-gray-400 select-none">
-                      {line.origin}
+                      {origin}
                     </span>
-                    {line.content.trimEnd()}
+                    {content?.trimEnd() || ''}
                   </div>
                 );
               })}

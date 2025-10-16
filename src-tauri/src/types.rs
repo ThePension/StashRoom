@@ -211,9 +211,111 @@ impl<T> ApiResponse<T> {
 }
 
 // ============================================================================
+// History Operations
+// ============================================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetLogRequest {
+    pub repo_id: String,
+    pub limit: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub skip: Option<usize>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetLogResponse {
+    pub commits: Vec<CommitSummary>,
+    pub has_more: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommitSummary {
+    pub oid: String,
+    pub short_oid: String,
+    pub author: CommitAuthor,
+    pub time: i64, // epoch seconds
+    pub message: String,
+    pub subject: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub refs: Option<Vec<String>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommitAuthor {
+    pub name: String,
+    pub email: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetCommitDiffRequest {
+    pub repo_id: String,
+    pub oid: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent: Option<usize>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetCommitDiffResponse {
+    pub files: Vec<CommitFileDiff>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CommitFileChangeType {
+    Added,
+    Modified,
+    Deleted,
+    Renamed,
+    Copied,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommitFileDiff {
+    pub path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub old_path: Option<String>,
+    pub change: CommitFileChangeType,
+    pub is_binary: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hunks: Option<Vec<CommitDiffHunk>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommitDiffHunk {
+    pub header: String,
+    pub old_start: u32,
+    pub old_lines: u32,
+    pub new_start: u32,
+    pub new_lines: u32,
+    pub lines: Vec<CommitDiffLine>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommitDiffLine {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ln_old: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ln_new: Option<u32>,
+    #[serde(rename = "type")]
+    pub line_type: String, // "add" | "del" | "ctx"
+    pub text: String,
+}
+
+// ============================================================================
 // Internal Cache Types
 // ============================================================================
 
+// Note: DiffCacheKey is prepared for future caching implementation
+#[allow(dead_code)]
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct DiffCacheKey {
     pub path: String,

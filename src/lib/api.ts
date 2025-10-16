@@ -13,6 +13,10 @@ import type {
   CommitRequest,
   CommitResponse,
   WatchEvent,
+  GetLogRequest,
+  GetLogResponse,
+  GetCommitDiffRequest,
+  GetCommitDiffResponse,
 } from './types';
 
 class GitAPI {
@@ -129,6 +133,20 @@ class GitAPI {
     return listen<WatchEvent>('watch-event', (event) => {
       callback(event.payload);
     });
+  }
+
+  /**
+   * Gets commit history for the current branch
+   */
+  async getLog(request: GetLogRequest): Promise<ApiResponse<GetLogResponse>> {
+    return invoke<ApiResponse<GetLogResponse>>('get_log', { request });
+  }
+
+  /**
+   * Gets the diff for a specific commit
+   */
+  async getCommitDiff(request: GetCommitDiffRequest): Promise<ApiResponse<GetCommitDiffResponse>> {
+    return invoke<ApiResponse<GetCommitDiffResponse>>('get_commit_diff', { request });
   }
 }
 

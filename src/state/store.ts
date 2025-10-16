@@ -6,6 +6,8 @@ import type {
   StatusEntry,
   FileDiff,
   StatusMatrix,
+  CommitSummary,
+  CommitFileDiff,
 } from '../lib/types';
 
 interface RepoState {
@@ -48,12 +50,29 @@ interface UIState {
   setIsOperating: (value: boolean) => void;
 }
 
+interface HistoryState {
+  commits: CommitSummary[];
+  hasMore: boolean;
+  isLoading: boolean;
+  selectedCommit: CommitSummary | null;
+  commitDiff: CommitFileDiff[] | null;
+  selectedCommitFile: CommitFileDiff | null;
+  selectedParent: number;
+  loadHistory: (repoId: string, limit?: number, skip?: number) => Promise<void>;
+  loadMore: (repoId: string) => Promise<void>;
+  selectCommit: (repoId: string, commit: CommitSummary, parent?: number) => Promise<void>;
+  selectCommitFile: (file: CommitFileDiff | null) => void;
+  setSelectedParent: (parent: number) => Promise<void>;
+  clearHistory: () => void;
+}
+
 export interface AppStore
   extends RepoState,
     StatusState,
     DiffState,
     SelectionState,
-    UIState {}
+    UIState,
+    HistoryState {}
 
 export const useStore = create<AppStore>((set, get) => ({
   // Repo state
@@ -222,5 +241,92 @@ export const useStore = create<AppStore>((set, get) => ({
 
   setIsOperating: (value: boolean) => {
     set({ isOperating: value });
+  },
+
+  // History state
+  commits: [],
+  hasMore: false,
+  selectedCommit: null,
+  commitDiff: null,
+  selectedCommitFile: null,
+  selectedParent: 0,
+
+  loadHistory: async (repoId: string, limit: number = 50, skip: number = 0) => {
+    set({ isLoading: true });
+    try {
+      const response = await api.getLog({ repoId, limit, skip });
+      if (response.ok && response.data) {
+        if (skip === 0) {
+          // Initial load
+          set({
+            commits: response.data.commits,
+            hasMore: response.data.hasMore,
+            isLoading: false,
+          });
+        } else {
+          // Load more (append)
+          set({
+            commits: [...get().commits, ...response.data.commits],
+            hasMore: response.data.hasMore,
+            isLoading: false,
+          });
+        }
+      } else {
+        toast.error(response.message || 'Failed to load history');
+        set({ isLoading: false });
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      toast.error(message);
+      set({ isLoading: false });
+    }
+  },
+
+  loadMore: async (repoId: string) => {
+    const { commits, hasMore, isLoading } = get();
+    if (!hasMore || isLoading) return;
+
+    await get().loadHistory(repoId, 50, commits.length);
+  },
+
+  selectCommit: async (repoId: string, commit: CommitSummary, parent: number = 0) => {
+    set({ selectedCommit: commit, selectedParent: parent, selectedCommitFile: null, isLoading: true });
+    try {
+      const response = await api.getCommitDiff({ repoId, oid: commit.oid, parent });
+      if (response.ok && response.data) {
+        set({ commitDiff: response.data.files, isLoading: false });
+        // Clear working diff state when viewing commit
+        set({ currentDiff: null, currentDiffSide: null, selectedPath: null });
+      } else {
+        toast.error(response.message || 'Failed to load commit diff');
+        set({ isLoading: false, commitDiff: null });
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      toast.error(message);
+      set({ isLoading: false, commitDiff: null });
+    }
+  },
+
+  selectCommitFile: (file: CommitFileDiff | null) => {
+    set({ selectedCommitFile: file });
+  },
+
+  setSelectedParent: async (parent: number) => {
+    const { repo, selectedCommit } = get();
+    if (!repo || !selectedCommit) return;
+
+    await get().selectCommit(repo.repoId, selectedCommit, parent);
+  },
+
+  clearHistory: () => {
+    set({
+      commits: [],
+      hasMore: false,
+      selectedCommit: null,
+      commitDiff: null,
+      selectedCommitFile: null,
+      selectedParent: 0,
+    });
   },
 }));

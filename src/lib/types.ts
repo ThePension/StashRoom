@@ -143,3 +143,69 @@ export interface WatchEvent {
   paths: string[];
   eventType: string; // "modified" | "created" | "deleted"
 }
+
+// ============================================================================
+// History Operations
+// ============================================================================
+
+export interface GetLogRequest {
+  repoId: string;
+  limit: number;
+  skip?: number;
+}
+
+export interface GetLogResponse {
+  commits: CommitSummary[];
+  hasMore: boolean;
+}
+
+export interface CommitSummary {
+  oid: string;
+  shortOid: string;
+  author: CommitAuthor;
+  time: number; // epoch seconds
+  message: string;
+  subject: string;
+  refs?: string[];
+}
+
+export interface CommitAuthor {
+  name: string;
+  email: string;
+}
+
+export interface GetCommitDiffRequest {
+  repoId: string;
+  oid: string;
+  parent?: number;
+}
+
+export interface GetCommitDiffResponse {
+  files: CommitFileDiff[];
+}
+
+export type CommitFileChangeType = "added" | "modified" | "deleted" | "renamed" | "copied";
+
+export interface CommitFileDiff {
+  path: string;
+  oldPath?: string;
+  change: CommitFileChangeType;
+  isBinary: boolean;
+  hunks?: CommitDiffHunk[];
+}
+
+export interface CommitDiffHunk {
+  header: string;
+  oldStart: number;
+  oldLines: number;
+  newStart: number;
+  newLines: number;
+  lines: CommitDiffLine[];
+}
+
+export interface CommitDiffLine {
+  lnOld?: number;
+  lnNew?: number;
+  type: "add" | "del" | "ctx";
+  text: string;
+}

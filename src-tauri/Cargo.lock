@@ -1998,27 +1998,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "kite"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "chrono",
- "git2",
- "insta",
- "notify",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-dialog",
- "tauri-plugin-opener",
- "tauri-plugin-os",
- "tauri-plugin-shell",
- "tempfile",
- "uuid",
-]
-
-[[package]]
 name = "kqueue"
 version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3856,6 +3835,27 @@ name = "stable_deref_trait"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6ce2be8dc25455e1f91df71bfa12ad37d7af1092ae736f3a6cd0e37bc7810596"
+
+[[package]]
+name = "stashroom"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "git2",
+ "insta",
+ "notify",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-dialog",
+ "tauri-plugin-opener",
+ "tauri-plugin-os",
+ "tauri-plugin-shell",
+ "tempfile",
+ "uuid",
+]
 
 [[package]]
 name = "static_assertions"

@@ -1,6 +1,6 @@
 use tauri::{AppHandle, State};
 
-use crate::core::{diff, discard, fs_watch, repo, stage, status};
+use crate::core::{diff, discard, fs_watch, history, repo, stage, status};
 use crate::types::*;
 
 /// Global application state
@@ -279,6 +279,39 @@ pub fn unsubscribe_watch(repo_id: String, state: State<AppState>) -> ApiResponse
     match state.watch_manager.unwatch_repo(&repo_id) {
         Ok(_) => ApiResponse::success(()),
         Err(e) => ApiResponse::error("UNWATCH_ERROR".to_string(), e.to_string()),
+    }
+}
+
+// ============================================================================
+// History Commands
+// ============================================================================
+
+#[tauri::command]
+pub fn get_log(request: GetLogRequest, state: State<AppState>) -> ApiResponse<GetLogResponse> {
+    let repo = match state.repo_registry.get_repo(&request.repo_id) {
+        Ok(r) => r,
+        Err(e) => return ApiResponse::error("REPO_NOT_FOUND".to_string(), e.to_string()),
+    };
+
+    match history::get_log(&repo, request.limit, request.skip) {
+        Ok(response) => ApiResponse::success(response),
+        Err(e) => ApiResponse::error("GET_LOG_ERROR".to_string(), e.to_string()),
+    }
+}
+
+#[tauri::command]
+pub fn get_commit_diff(
+    request: GetCommitDiffRequest,
+    state: State<AppState>,
+) -> ApiResponse<GetCommitDiffResponse> {
+    let repo = match state.repo_registry.get_repo(&request.repo_id) {
+        Ok(r) => r,
+        Err(e) => return ApiResponse::error("REPO_NOT_FOUND".to_string(), e.to_string()),
+    };
+
+    match history::get_commit_diff(&repo, &request.oid, request.parent) {
+        Ok(response) => ApiResponse::success(response),
+        Err(e) => ApiResponse::error("GET_COMMIT_DIFF_ERROR".to_string(), e.to_string()),
     }
 }
 
