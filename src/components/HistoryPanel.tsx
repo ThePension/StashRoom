@@ -8,6 +8,7 @@ export function HistoryPanel() {
   const commits = useStore((s) => s.commits);
   const hasMore = useStore((s) => s.hasMore);
   const isLoading = useStore((s) => s.isLoading);
+  const isLoadingCommitDiff = useStore((s) => s.isLoadingCommitDiff);
   const selectedCommit = useStore((s) => s.selectedCommit);
   const commitDiff = useStore((s) => s.commitDiff);
   const selectedCommitFile = useStore((s) => s.selectedCommitFile);
@@ -109,7 +110,7 @@ export function HistoryPanel() {
                 {/* Commit Header */}
                 <div
                   onClick={() => handleSelectCommit(commit)}
-                  className={`px-3 py-2 cursor-pointer border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors ${
+                  className={`px-3 py-2 border-b border-gray-200 dark:border-gray-700 transition-colors cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 ${
                     isSelected ? 'bg-blue-50 dark:bg-blue-900/20 border-l-4 border-l-blue-500' : ''
                   }`}
                 >
@@ -149,31 +150,45 @@ export function HistoryPanel() {
                   </div>
                 </div>
 
-                {/* File List (shown when commit is selected) */}
-                {isSelected && commitDiff && commitDiff.length > 0 && (
+                {/* File List or Loading (shown when commit is selected) */}
+                {isSelected && (
                   <div className="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
-                    {commitDiff.map((file, fileIndex) => {
-                      const { icon, color } = getChangeIcon(file.change);
-                      const isFileSelected = selectedCommitFile?.path === file.path;
+                    {isLoadingCommitDiff ? (
+                      // Loading spinner
+                      <div className="px-6 py-4 flex items-center justify-center gap-2">
+                        <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-500 border-t-transparent"></div>
+                        <span className="text-xs text-gray-500 dark:text-gray-400">Loading files...</span>
+                      </div>
+                    ) : commitDiff && commitDiff.length > 0 ? (
+                      // File list
+                      commitDiff.map((file, fileIndex) => {
+                        const { icon, color } = getChangeIcon(file.change);
+                        const isFileSelected = selectedCommitFile?.path === file.path;
 
-                      return (
-                        <div
-                          key={fileIndex}
-                          onClick={(e) => handleSelectFile(file, e)}
-                          className={`px-6 py-1.5 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors flex items-center gap-2 ${
-                            isFileSelected ? 'bg-gray-200 dark:bg-gray-800' : ''
-                          }`}
-                        >
-                          <span className={`text-xs font-bold w-4 ${color}`}>{icon}</span>
-                          <span className="text-xs font-mono text-gray-700 dark:text-gray-300 truncate">
-                            {file.path}
-                          </span>
-                          {file.isBinary && (
-                            <span className="text-xs text-gray-500 dark:text-gray-400 italic">binary</span>
-                          )}
-                        </div>
-                      );
-                    })}
+                        return (
+                          <div
+                            key={fileIndex}
+                            onClick={(e) => handleSelectFile(file, e)}
+                            className={`px-6 py-1.5 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors flex items-center gap-2 ${
+                              isFileSelected ? 'bg-gray-200 dark:bg-gray-800' : ''
+                            }`}
+                          >
+                            <span className={`text-xs font-bold w-4 ${color}`}>{icon}</span>
+                            <span className="text-xs font-mono text-gray-700 dark:text-gray-300 truncate">
+                              {file.path}
+                            </span>
+                            {file.isBinary && (
+                              <span className="text-xs text-gray-500 dark:text-gray-400 italic">binary</span>
+                            )}
+                          </div>
+                        );
+                      })
+                    ) : (
+                      // No files
+                      <div className="px-6 py-2 text-xs text-gray-500 dark:text-gray-400 italic">
+                        No files changed
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

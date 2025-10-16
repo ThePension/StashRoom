@@ -54,6 +54,7 @@ interface HistoryState {
   commits: CommitSummary[];
   hasMore: boolean;
   isLoading: boolean;
+  isLoadingCommitDiff: boolean;
   selectedCommit: CommitSummary | null;
   commitDiff: CommitFileDiff[] | null;
   selectedCommitFile: CommitFileDiff | null;
@@ -246,6 +247,7 @@ export const useStore = create<AppStore>((set, get) => ({
   // History state
   commits: [],
   hasMore: false,
+  isLoadingCommitDiff: false,
   selectedCommit: null,
   commitDiff: null,
   selectedCommitFile: null,
@@ -290,21 +292,35 @@ export const useStore = create<AppStore>((set, get) => ({
   },
 
   selectCommit: async (repoId: string, commit: CommitSummary, parent: number = 0) => {
-    set({ selectedCommit: commit, selectedParent: parent, selectedCommitFile: null, isLoading: true });
+    const requestOid = commit.oid; // Capture the OID for this request
+
+    set({ selectedCommit: commit, selectedParent: parent, selectedCommitFile: null, isLoadingCommitDiff: true, commitDiff: null });
+    // Clear working diff state when viewing commit
+    set({ currentDiff: null, currentDiffSide: null, selectedPath: null });
+
     try {
       const response = await api.getCommitDiff({ repoId, oid: commit.oid, parent });
-      if (response.ok && response.data) {
-        set({ commitDiff: response.data.files, isLoading: false });
-        // Clear working diff state when viewing commit
-        set({ currentDiff: null, currentDiffSide: null, selectedPath: null });
-      } else {
-        toast.error(response.message || 'Failed to load commit diff');
-        set({ isLoading: false, commitDiff: null });
+
+      // Only update state if this commit is still the selected one
+      // (user might have clicked on another commit while this was loading)
+      const currentlySelected = get().selectedCommit;
+      if (currentlySelected?.oid === requestOid) {
+        if (response.ok && response.data) {
+          set({ commitDiff: response.data.files, isLoadingCommitDiff: false });
+        } else {
+          toast.error(response.message || 'Failed to load commit diff');
+          set({ isLoadingCommitDiff: false, commitDiff: null });
+        }
       }
+      // If different commit is now selected, silently ignore this response
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      toast.error(message);
-      set({ isLoading: false, commitDiff: null });
+      // Only show error if this commit is still selected
+      const currentlySelected = get().selectedCommit;
+      if (currentlySelected?.oid === requestOid) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        toast.error(message);
+        set({ isLoadingCommitDiff: false, commitDiff: null });
+      }
     }
   },
 

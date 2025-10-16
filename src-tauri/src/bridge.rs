@@ -300,19 +300,45 @@ pub fn get_log(request: GetLogRequest, state: State<AppState>) -> ApiResponse<Ge
 }
 
 #[tauri::command]
-pub fn get_commit_diff(
+pub async fn get_commit_diff(
     request: GetCommitDiffRequest,
-    state: State<AppState>,
-) -> ApiResponse<GetCommitDiffResponse> {
-    let repo = match state.repo_registry.get_repo(&request.repo_id) {
-        Ok(r) => r,
-        Err(e) => return ApiResponse::error("REPO_NOT_FOUND".to_string(), e.to_string()),
+    state: State<'_, AppState>,
+) -> Result<ApiResponse<GetCommitDiffResponse>, String> {
+    let repo_id = request.repo_id.clone();
+    let oid = request.oid.clone();
+    let parent = request.parent;
+
+    // Get the repository path (not the repo itself, since it's not Send)
+    let repo_path = {
+        let repo = match state.repo_registry.get_repo(&repo_id) {
+            Ok(r) => r,
+            Err(e) => return Ok(ApiResponse::error("REPO_NOT_FOUND".to_string(), e.to_string())),
+        };
+
+        match repo.path().parent() {
+            Some(p) => p.to_path_buf(),
+            None => return Ok(ApiResponse::error("INVALID_REPO_PATH".to_string(), "Repository has no parent path".to_string())),
+        }
     };
 
-    match history::get_commit_diff(&repo, &request.oid, request.parent) {
-        Ok(response) => ApiResponse::success(response),
-        Err(e) => ApiResponse::error("GET_COMMIT_DIFF_ERROR".to_string(), e.to_string()),
-    }
+    // Run the blocking git operation on a dedicated thread pool
+    // We reopen the repository in the blocking task since Repository is not Send
+    let result = tokio::task::spawn_blocking(move || {
+        // Reopen the repository in this thread
+        let repo = match git2::Repository::open(&repo_path) {
+            Ok(r) => r,
+            Err(e) => return ApiResponse::error("REPO_OPEN_ERROR".to_string(), e.to_string()),
+        };
+
+        match history::get_commit_diff(&repo, &oid, parent) {
+            Ok(response) => ApiResponse::success(response),
+            Err(e) => ApiResponse::error("GET_COMMIT_DIFF_ERROR".to_string(), e.to_string()),
+        }
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?;
+
+    Ok(result)
 }
 
 // ============================================================================
