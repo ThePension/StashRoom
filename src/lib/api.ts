@@ -4,6 +4,7 @@ import type {
   ApiResponse,
   RepoOpenRequest,
   RepoOpenResponse,
+  HeadInfo,
   StatusMatrix,
   DiffRequest,
   FileDiff,
@@ -17,6 +18,9 @@ import type {
   GetLogResponse,
   GetCommitDiffRequest,
   GetCommitDiffResponse,
+  ListBranchesResponse,
+  SwitchBranchRequest,
+  SwitchBranchResponse,
 } from './types';
 
 class GitAPI {
@@ -154,6 +158,27 @@ class GitAPI {
    */
   async getCommitDiff(request: GetCommitDiffRequest): Promise<ApiResponse<GetCommitDiffResponse>> {
     return invoke<ApiResponse<GetCommitDiffResponse>>('get_commit_diff', { request });
+  }
+
+  /**
+   * Gets the current HEAD information (branch and commit)
+   */
+  async getHeadInfo(repoId: string): Promise<ApiResponse<HeadInfo>> {
+    return invoke<ApiResponse<HeadInfo>>('get_head_info', { repoId });
+  }
+
+  /**
+   * Lists all local branches
+   */
+  async listBranches(repoId: string): Promise<ApiResponse<ListBranchesResponse>> {
+    return invoke<ApiResponse<ListBranchesResponse>>('list_branches', { repoId });
+  }
+
+  /**
+   * Switches to a different branch
+   */
+  async switchBranch(request: SwitchBranchRequest): Promise<ApiResponse<SwitchBranchResponse>> {
+    return invoke<ApiResponse<SwitchBranchResponse>>('switch_branch', { request });
   }
 }
 

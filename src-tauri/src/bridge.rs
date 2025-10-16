@@ -318,6 +318,151 @@ pub fn unsubscribe_watch(repo_id: String, state: State<AppState>) -> ApiResponse
 }
 
 // ============================================================================
+// Branch Commands
+// ============================================================================
+
+#[tauri::command]
+pub fn get_head_info(repo_id: String, state: State<AppState>) -> ApiResponse<HeadInfo> {
+    let repo = match state.repo_registry.get_repo(&repo_id) {
+        Ok(r) => r,
+        Err(e) => return ApiResponse::error("REPO_NOT_FOUND".to_string(), e.to_string()),
+    };
+
+    // Get HEAD reference
+    let head = match repo.head() {
+        Ok(h) => h,
+        Err(e) => return ApiResponse::error("HEAD_ERROR".to_string(), e.to_string()),
+    };
+
+    // Get branch name if on a branch
+    let branch = if head.is_branch() {
+        head.shorthand().map(|s| s.to_string())
+    } else {
+        None
+    };
+
+    // Get commit OID
+    let commit_oid = match head.peel_to_commit() {
+        Ok(c) => c.id().to_string(),
+        Err(e) => return ApiResponse::error("COMMIT_ERROR".to_string(), e.to_string()),
+    };
+
+    // Get commit message
+    let message = match head.peel_to_commit() {
+        Ok(c) => c.message().map(|m| m.to_string()),
+        Err(_) => None,
+    };
+
+    ApiResponse::success(HeadInfo {
+        branch,
+        commit: commit_oid,
+        message,
+    })
+}
+
+#[tauri::command]
+pub fn list_branches(
+    repo_id: String,
+    state: State<AppState>,
+) -> ApiResponse<ListBranchesResponse> {
+    let repo = match state.repo_registry.get_repo(&repo_id) {
+        Ok(r) => r,
+        Err(e) => return ApiResponse::error("REPO_NOT_FOUND".to_string(), e.to_string()),
+    };
+
+    // Get all local branches
+    let branches = match repo.branches(Some(git2::BranchType::Local)) {
+        Ok(b) => b,
+        Err(e) => return ApiResponse::error("BRANCH_LIST_ERROR".to_string(), e.to_string()),
+    };
+
+    let mut locals = Vec::new();
+    let mut current: Option<String> = None;
+
+    for branch in branches {
+        let (branch, _) = match branch {
+            Ok(b) => b,
+            Err(e) => return ApiResponse::error("BRANCH_ITER_ERROR".to_string(), e.to_string()),
+        };
+
+        let name = match branch.name() {
+            Ok(Some(n)) => n.to_string(),
+            Ok(None) => continue, // Skip branches with invalid UTF-8 names
+            Err(e) => return ApiResponse::error("BRANCH_NAME_ERROR".to_string(), e.to_string()),
+        };
+
+        let is_head = match branch.is_head() {
+            true => {
+                current = Some(name.clone());
+                true
+            }
+            false => false,
+        };
+
+        locals.push(BranchInfo { name, is_head });
+    }
+
+    ApiResponse::success(ListBranchesResponse { current, locals })
+}
+
+#[tauri::command]
+pub fn switch_branch(
+    request: SwitchBranchRequest,
+    state: State<AppState>,
+) -> ApiResponse<SwitchBranchResponse> {
+    let repo = match state.repo_registry.get_repo(&request.repo_id) {
+        Ok(r) => r,
+        Err(e) => return ApiResponse::error("REPO_NOT_FOUND".to_string(), e.to_string()),
+    };
+
+    // Check if there are uncommitted changes
+    match status::get_status(&repo) {
+        Ok(status) => {
+            if !status.entries.is_empty() {
+                return ApiResponse::error(
+                    "UNCOMMITTED_CHANGES".to_string(),
+                    "You have uncommitted changes. Commit or stash before switching.".to_string(),
+                );
+            }
+        }
+        Err(e) => return ApiResponse::error("STATUS_ERROR".to_string(), e.to_string()),
+    }
+
+    // Find the branch
+    let branch = match repo.find_branch(&request.name, git2::BranchType::Local) {
+        Ok(b) => b,
+        Err(e) => return ApiResponse::error("BRANCH_NOT_FOUND".to_string(), e.to_string()),
+    };
+
+    // Get the reference
+    let reference = match branch.get() {
+        r => r,
+    };
+
+    // Get the commit that the branch points to
+    let commit = match reference.peel_to_commit() {
+        Ok(c) => c,
+        Err(e) => return ApiResponse::error("COMMIT_NOT_FOUND".to_string(), e.to_string()),
+    };
+
+    // Checkout the commit
+    match repo.checkout_tree(commit.as_object(), Some(git2::build::CheckoutBuilder::new().safe())) {
+        Ok(_) => {},
+        Err(e) => return ApiResponse::error("CHECKOUT_ERROR".to_string(), e.to_string()),
+    };
+
+    // Set HEAD to the branch
+    match repo.set_head(&format!("refs/heads/{}", request.name)) {
+        Ok(_) => {},
+        Err(e) => return ApiResponse::error("SET_HEAD_ERROR".to_string(), e.to_string()),
+    };
+
+    ApiResponse::success(SwitchBranchResponse {
+        name: request.name,
+    })
+}
+
+// ============================================================================
 // History Commands
 // ============================================================================
 

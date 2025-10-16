@@ -209,3 +209,26 @@ export interface CommitDiffLine {
   type: "add" | "del" | "ctx";
   text: string;
 }
+
+// ============================================================================
+// Branch Operations
+// ============================================================================
+
+export interface BranchInfo {
+  name: string;
+  isHead: boolean;
+}
+
+export interface ListBranchesResponse {
+  current: string | null;
+  locals: BranchInfo[];
+}
+
+export interface SwitchBranchRequest {
+  repoId: string;
+  name: string;
+}
+
+export interface SwitchBranchResponse {
+  name: string;
+}

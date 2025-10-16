@@ -104,7 +104,10 @@ export function StagePanel() {
             <div className="text-xs text-gray-600 dark:text-gray-400 space-y-1">
               <div className="flex items-center justify-between">
                 <span>Branch:</span>
-                <span className="font-mono font-medium">
+                <span
+                  className="font-mono font-medium max-w-[150px] truncate"
+                  title={repo.head.branch || 'detached HEAD'}
+                >
                   {repo.head.branch || 'detached HEAD'}
                 </span>
               </div>

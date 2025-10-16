@@ -16,6 +16,7 @@ interface RepoState {
   error: string | null;
   openRepo: (path: string) => Promise<void>;
   closeRepo: () => Promise<void>;
+  updateHeadInfo: (repoId: string) => Promise<void>;
 }
 
 interface StatusState {
@@ -146,6 +147,26 @@ export const useStore = create<AppStore>((set, get) => ({
         selectedHunkIndex: null,
         selectedLineIndices: [],
       });
+    }
+  },
+
+  updateHeadInfo: async (repoId: string) => {
+    const { repo } = get();
+    if (!repo || repo.repoId !== repoId) return;
+
+    try {
+      const response = await api.getHeadInfo(repoId);
+      if (response.ok && response.data) {
+        // Update just the head info in the repo object
+        set({
+          repo: {
+            ...repo,
+            head: response.data,
+          },
+        });
+      }
+    } catch (error) {
+      console.error('Failed to update HEAD info:', error);
     }
   },
 

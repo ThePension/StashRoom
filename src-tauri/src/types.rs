@@ -311,6 +311,37 @@ pub struct CommitDiffLine {
 }
 
 // ============================================================================
+// Branch Operations
+// ============================================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BranchInfo {
+    pub name: String,
+    pub is_head: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListBranchesResponse {
+    pub current: Option<String>,
+    pub locals: Vec<BranchInfo>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SwitchBranchRequest {
+    pub repo_id: String,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SwitchBranchResponse {
+    pub name: String,
+}
+
+// ============================================================================
 // Internal Cache Types
 // ============================================================================
 
