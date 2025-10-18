@@ -313,9 +313,24 @@ fn apply_patch_to_index(repo: &Repository, patch: &str) -> Result<()> {
 /// Stages an entire file
 pub fn stage_file(repo: &Repository, path: &str) -> Result<StatusMatrix> {
     let mut index = repo.index().context("Failed to get index")?;
-    index
-        .add_path(Path::new(path))
-        .context("Failed to add file to index")?;
+
+    // Check if the file exists in the working directory
+    let workdir = repo.workdir().context("Repository has no working directory")?;
+    let file_path = workdir.join(path);
+
+    // Check if the path exists and is a file (not a directory)
+    if file_path.exists() && file_path.is_file() {
+        // File exists, add it to the index
+        index
+            .add_path(Path::new(path))
+            .context("Failed to add file to index")?;
+    } else {
+        // File doesn't exist or is a directory (meaning original file was deleted), remove it from the index
+        index
+            .remove_path(Path::new(path))
+            .context("Failed to remove file from index")?;
+    }
+
     index.write().context("Failed to write index")?;
 
     crate::core::status::get_status(repo)
@@ -479,6 +494,29 @@ mod tests {
 
         assert!(entry.untracked);
         assert!(entry.staged_status.is_none());
+    }
+
+    #[test]
+    fn test_stage_deleted_file() {
+        let (temp_dir, repo) = create_test_repo();
+
+        // Create, commit, and then delete a file
+        commit_file(&repo, "test.txt", "Content to delete", &temp_dir);
+
+        let file_path = temp_dir.path().join("test.txt");
+        fs::remove_file(&file_path).unwrap();
+
+        // Stage the deletion
+        let status = stage_file(&repo, "test.txt").unwrap();
+
+        let entry = status
+            .entries
+            .iter()
+            .find(|e| e.path == "test.txt")
+            .unwrap();
+
+        assert_eq!(entry.staged_status, Some("deleted".to_string()));
+        assert!(entry.unstaged_status.is_none());
     }
 
     // ========================================================================
@@ -806,5 +844,257 @@ mod tests {
 
         // Snapshot the patch
         insta::assert_snapshot!(patch);
+    }
+
+    // ========================================================================
+    // Edge case tests
+    // ========================================================================
+
+    #[test]
+    fn test_stage_renamed_file_old_path() {
+        let (temp_dir, repo) = create_test_repo();
+
+        // Create and commit a file
+        commit_file(&repo, "old_name.txt", "File content", &temp_dir);
+
+        // Rename the file (delete old, create new)
+        let old_path = temp_dir.path().join("old_name.txt");
+        let new_path = temp_dir.path().join("new_name.txt");
+        fs::rename(&old_path, &new_path).unwrap();
+
+        // Stage the deletion of the old path
+        let status = stage_file(&repo, "old_name.txt").unwrap();
+
+        // Should have the old file staged as deleted
+        let old_entry = status.entries.iter().find(|e| e.path == "old_name.txt");
+        assert!(old_entry.is_some());
+        let old_entry = old_entry.unwrap();
+        assert_eq!(old_entry.staged_status, Some("deleted".to_string()));
+
+        // New file should be untracked
+        let new_entry = status.entries.iter().find(|e| e.path == "new_name.txt");
+        assert!(new_entry.is_some());
+        assert!(new_entry.unwrap().untracked);
+    }
+
+    #[test]
+    fn test_stage_renamed_file_both_paths() {
+        let (temp_dir, repo) = create_test_repo();
+
+        // Create and commit a file
+        commit_file(&repo, "old_name.txt", "File content", &temp_dir);
+
+        // Rename the file
+        let old_path = temp_dir.path().join("old_name.txt");
+        let new_path = temp_dir.path().join("new_name.txt");
+        fs::rename(&old_path, &new_path).unwrap();
+
+        // Stage both old (deletion) and new (addition)
+        stage_file(&repo, "old_name.txt").unwrap();
+        let status = stage_file(&repo, "new_name.txt").unwrap();
+
+        // Both should be staged
+        let old_entry = status.entries.iter().find(|e| e.path == "old_name.txt");
+        assert!(old_entry.is_some());
+        assert_eq!(old_entry.unwrap().staged_status, Some("deleted".to_string()));
+
+        let new_entry = status.entries.iter().find(|e| e.path == "new_name.txt");
+        assert!(new_entry.is_some());
+        assert_eq!(new_entry.unwrap().staged_status, Some("added".to_string()));
+    }
+
+    #[test]
+    fn test_stage_file_with_spaces() {
+        let (temp_dir, repo) = create_test_repo();
+
+        // Create and commit a file with spaces in the name
+        let filename = "my file with spaces.txt";
+        commit_file(&repo, filename, "Content", &temp_dir);
+
+        // Delete the file
+        let file_path = temp_dir.path().join(filename);
+        fs::remove_file(&file_path).unwrap();
+
+        // Stage the deletion
+        let status = stage_file(&repo, filename).unwrap();
+
+        let entry = status.entries.iter().find(|e| e.path == filename).unwrap();
+        assert_eq!(entry.staged_status, Some("deleted".to_string()));
+    }
+
+    #[test]
+    fn test_stage_file_with_unicode() {
+        let (temp_dir, repo) = create_test_repo();
+
+        // Create and commit a file with unicode characters
+        let filename = "файл.txt"; // Russian for "file"
+        commit_file(&repo, filename, "Content", &temp_dir);
+
+        // Delete the file
+        let file_path = temp_dir.path().join(filename);
+        fs::remove_file(&file_path).unwrap();
+
+        // Stage the deletion
+        let status = stage_file(&repo, filename).unwrap();
+
+        let entry = status.entries.iter().find(|e| e.path == filename).unwrap();
+        assert_eq!(entry.staged_status, Some("deleted".to_string()));
+    }
+
+    #[test]
+    fn test_stage_file_with_special_chars() {
+        let (temp_dir, repo) = create_test_repo();
+
+        // Create and commit a file with special characters
+        let filename = "file (copy).txt";
+        commit_file(&repo, filename, "Content", &temp_dir);
+
+        // Delete the file
+        let file_path = temp_dir.path().join(filename);
+        fs::remove_file(&file_path).unwrap();
+
+        // Stage the deletion
+        let status = stage_file(&repo, filename).unwrap();
+
+        let entry = status.entries.iter().find(|e| e.path == filename).unwrap();
+        assert_eq!(entry.staged_status, Some("deleted".to_string()));
+    }
+
+    #[test]
+    fn test_stage_nested_file_deletion() {
+        let (temp_dir, repo) = create_test_repo();
+
+        // Create nested directory structure
+        let nested_path = "src/components/MyComponent.tsx";
+        let dir_path = temp_dir.path().join("src/components");
+        fs::create_dir_all(&dir_path).unwrap();
+
+        // Commit the nested file
+        commit_file(&repo, nested_path, "Component content", &temp_dir);
+
+        // Delete the file
+        let file_path = temp_dir.path().join(nested_path);
+        fs::remove_file(&file_path).unwrap();
+
+        // Stage the deletion
+        let status = stage_file(&repo, nested_path).unwrap();
+
+        let entry = status.entries.iter().find(|e| e.path == nested_path).unwrap();
+        assert_eq!(entry.staged_status, Some("deleted".to_string()));
+    }
+
+    #[test]
+    fn test_stage_deeply_nested_file() {
+        let (temp_dir, repo) = create_test_repo();
+
+        // Create a deeply nested file
+        let nested_path = "a/b/c/d/e/file.txt";
+        let dir_path = temp_dir.path().join("a/b/c/d/e");
+        fs::create_dir_all(&dir_path).unwrap();
+
+        // Commit the file
+        commit_file(&repo, nested_path, "Deep content", &temp_dir);
+
+        // Delete the file
+        let file_path = temp_dir.path().join(nested_path);
+        fs::remove_file(&file_path).unwrap();
+
+        // Stage the deletion
+        let status = stage_file(&repo, nested_path).unwrap();
+
+        let entry = status.entries.iter().find(|e| e.path == nested_path).unwrap();
+        assert_eq!(entry.staged_status, Some("deleted".to_string()));
+    }
+
+    #[test]
+    fn test_stage_binary_file_deletion() {
+        let (temp_dir, repo) = create_test_repo();
+
+        // Create a binary file (simulated with non-UTF8 bytes)
+        let filename = "image.png";
+        let binary_content: Vec<u8> = vec![0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]; // PNG header
+
+        let file_path = temp_dir.path().join(filename);
+        fs::write(&file_path, &binary_content).unwrap();
+
+        // Stage and commit the binary file
+        let mut index = repo.index().unwrap();
+        index.add_path(Path::new(filename)).unwrap();
+        index.write().unwrap();
+
+        let signature = git2::Signature::now("Test User", "test@example.com").unwrap();
+        let tree_id = index.write_tree().unwrap();
+        let tree = repo.find_tree(tree_id).unwrap();
+        let parent = repo.head().unwrap().peel_to_commit().unwrap();
+
+        repo.commit(
+            Some("HEAD"),
+            &signature,
+            &signature,
+            "Add binary file",
+            &tree,
+            &[&parent],
+        )
+        .unwrap();
+
+        // Delete the binary file
+        fs::remove_file(&file_path).unwrap();
+
+        // Stage the deletion
+        let status = stage_file(&repo, filename).unwrap();
+
+        let entry = status.entries.iter().find(|e| e.path == filename).unwrap();
+        assert_eq!(entry.staged_status, Some("deleted".to_string()));
+    }
+
+    #[test]
+    fn test_stage_file_after_directory_with_same_name_deleted() {
+        let (temp_dir, repo) = create_test_repo();
+
+        // Create a file
+        commit_file(&repo, "test", "File content", &temp_dir);
+
+        // Delete the file
+        let file_path = temp_dir.path().join("test");
+        fs::remove_file(&file_path).unwrap();
+
+        // Create a directory with the same name
+        fs::create_dir(&file_path).unwrap();
+        let nested_file = file_path.join("nested.txt");
+        fs::write(&nested_file, "Nested content").unwrap();
+
+        // Stage the deletion of the original file
+        let status = stage_file(&repo, "test").unwrap();
+
+        // The file deletion should be staged
+        let entry = status.entries.iter().find(|e| e.path == "test");
+        assert!(entry.is_some());
+        assert_eq!(entry.unwrap().staged_status, Some("deleted".to_string()));
+    }
+
+    #[test]
+    fn test_stage_multiple_deleted_files() {
+        let (temp_dir, repo) = create_test_repo();
+
+        // Create and commit multiple files
+        commit_file(&repo, "file1.txt", "Content 1", &temp_dir);
+        commit_file(&repo, "file2.txt", "Content 2", &temp_dir);
+        commit_file(&repo, "file3.txt", "Content 3", &temp_dir);
+
+        // Delete all files
+        fs::remove_file(temp_dir.path().join("file1.txt")).unwrap();
+        fs::remove_file(temp_dir.path().join("file2.txt")).unwrap();
+        fs::remove_file(temp_dir.path().join("file3.txt")).unwrap();
+
+        // Stage all deletions
+        stage_file(&repo, "file1.txt").unwrap();
+        stage_file(&repo, "file2.txt").unwrap();
+        let status = stage_file(&repo, "file3.txt").unwrap();
+
+        // All should be staged as deleted
+        for filename in &["file1.txt", "file2.txt", "file3.txt"] {
+            let entry = status.entries.iter().find(|e| e.path == *filename).unwrap();
+            assert_eq!(entry.staged_status, Some("deleted".to_string()));
+        }
     }
 }
