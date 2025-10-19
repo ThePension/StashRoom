@@ -27,3 +27,5 @@ dist-ssr
 *.claude
 
 */src/core/snapshots/
+
+./vsdode
