@@ -20,10 +20,10 @@ code {
   font-family: 'Courier New', Courier, monospace;
 }
 
-/* Custom Scrollbar Styles */
+/* Custom Scrollbar Styles - Light Mode */
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgb(156 163 175) rgb(243 244 246); /* gray-400 on gray-100 for light mode */
+  scrollbar-color: rgb(156 163 175) rgb(243 244 246); /* gray-400 on gray-100 */
 }
 
 /* Webkit browsers (Chrome, Safari, Edge) */
@@ -45,21 +45,19 @@ code {
   background: rgb(107 114 128); /* gray-500 */
 }
 
-/* Dark mode scrollbar using media query */
-@media (prefers-color-scheme: dark) {
-  * {
-    scrollbar-color: rgb(75 85 99) rgb(17 24 39); /* gray-600 on gray-900 */
-  }
+/* Dark mode scrollbar using class selector */
+.dark * {
+  scrollbar-color: rgb(75 85 99) rgb(17 24 39); /* gray-600 on gray-900 */
+}
 
-  *::-webkit-scrollbar-track {
-    background: rgb(17 24 39); /* gray-900 */
-  }
+.dark *::-webkit-scrollbar-track {
+  background: rgb(17 24 39); /* gray-900 */
+}
 
-  *::-webkit-scrollbar-thumb {
-    background: rgb(75 85 99); /* gray-600 */
-  }
+.dark *::-webkit-scrollbar-thumb {
+  background: rgb(75 85 99); /* gray-600 */
+}
 
-  *::-webkit-scrollbar-thumb:hover {
-    background: rgb(107 114 128); /* gray-500 */
-  }
+.dark *::-webkit-scrollbar-thumb:hover {
+  background: rgb(107 114 128); /* gray-500 */
 }

@@ -11,6 +11,7 @@ export function DiffPanel() {
   const selectedCommitFile = useStore((s) => s.selectedCommitFile);
   const setIsOperating = useStore((s) => s.setIsOperating);
   const entries = useStore((s) => s.entries);
+  const showLineNumbers = useStore((s) => s.settings.showLineNumbers);
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
@@ -376,12 +377,15 @@ export function DiffPanel() {
                   ? ((line as any).type === 'add' ? '+' : (line as any).type === 'del' ? '-' : ' ')
                   : (line as any).origin;
                 const content = isCommitDiff ? (line as any).text : (line as any).content;
+                const oldLineno = isCommitDiff ? (line as any).lnOld : (line as any).oldLineno;
+                const newLineno = isCommitDiff ? (line as any).lnNew : (line as any).newLineno;
 
                 const isSelected = selectedLines.get(hunkIndex)?.has(lineIndex);
                 const isAddedLine = origin === '+' && !isViewingStaged && !isCommitDiff;
 
                 // Build className string more cleanly
-                let lineClasses = `px-4 py-0.5 ${wrapLines ? 'whitespace-pre-wrap break-all' : 'whitespace-pre'} transition-colors`;
+                let lineClasses = `py-0.5 ${wrapLines ? 'whitespace-pre-wrap break-all' : 'whitespace-pre'} transition-colors`;
+                lineClasses += showLineNumbers ? ' pl-2 pr-4' : ' px-4';
 
                 if (isSelected && !isCommitDiff) {
                   // Selected state - always blue with consistent styling
@@ -406,12 +410,24 @@ export function DiffPanel() {
                     key={lineIndex}
                     onMouseDown={!isCommitDiff ? (e) => handleLineMouseDown(hunkIndex, lineIndex, origin, e) : undefined}
                     onMouseEnter={!isCommitDiff ? () => handleLineMouseEnter(hunkIndex, lineIndex, origin) : undefined}
-                    className={lineClasses}
+                    className={`flex ${lineClasses}`}
                   >
-                    <span className="inline-block w-4 text-gray-400 select-none">
+                    {showLineNumbers && (
+                      <div className="flex-shrink-0 select-none text-gray-400 mr-2">
+                        {!isCommitDiff && !currentDiff?.isNew && (
+                          <span className="inline-block w-10 text-right">
+                            {oldLineno ?? ''}
+                          </span>
+                        )}
+                        <span className={`inline-block w-10 text-right ${!isCommitDiff && !currentDiff?.isNew ? 'ml-1' : ''}`}>
+                          {newLineno ?? ''}
+                        </span>
+                      </div>
+                    )}
+                    <span className="inline-block w-4 text-gray-400 select-none flex-shrink-0">
                       {origin}
                     </span>
-                    {content?.trimEnd() || ''}
+                    <span className="flex-1">{content?.trimEnd() || ''}</span>
                   </div>
                 );
               })}

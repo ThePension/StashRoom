@@ -51,6 +51,16 @@ interface UIState {
   setIsOperating: (value: boolean) => void;
 }
 
+interface Settings {
+  showLineNumbers: boolean;
+  theme: 'light' | 'dark' | 'system';
+}
+
+interface SettingsState {
+  settings: Settings;
+  updateSettings: (settings: Partial<Settings>) => void;
+}
+
 interface HistoryState {
   commits: CommitSummary[];
   hasMore: boolean;
@@ -74,6 +84,7 @@ export interface AppStore
     DiffState,
     SelectionState,
     UIState,
+    SettingsState,
     HistoryState {}
 
 export const useStore = create<AppStore>((set, get) => ({
@@ -263,6 +274,21 @@ export const useStore = create<AppStore>((set, get) => ({
 
   setIsOperating: (value: boolean) => {
     set({ isOperating: value });
+  },
+
+  // Settings state
+  settings: {
+    showLineNumbers: false,
+    theme: 'system',
+  },
+
+  updateSettings: (newSettings: Partial<Settings>) => {
+    set((state) => ({
+      settings: {
+        ...state.settings,
+        ...newSettings,
+      },
+    }));
   },
 
   // History state

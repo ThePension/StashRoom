@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { Toaster } from 'sonner';
 import { useStore } from './state/store';
@@ -8,13 +8,60 @@ import { StagePanel } from './components/StagePanel';
 import { KeyboardShortcutsHelp } from './components/KeyboardShortcutsHelp';
 import { HistoryPanel } from './components/HistoryPanel';
 import { BranchPanel } from './components/BranchPanel';
+import { SettingsDialog } from './components/SettingsDialog';
 
 function App() {
   const repo = useStore((s) => s.repo);
   const isLoading = useStore((s) => s.isLoading);
   const isOperating = useStore((s) => s.isOperating);
   const openRepo = useStore((s) => s.openRepo);
+  const theme = useStore((s) => s.settings.theme);
   const [showHistory, setShowHistory] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+
+  // Apply theme based on settings - runs on every theme change
+  useEffect(() => {
+    const applyTheme = () => {
+      const root = document.documentElement;
+
+      if (theme === 'system') {
+        // Use system preference
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        if (prefersDark) {
+          root.classList.add('dark');
+        } else {
+          root.classList.remove('dark');
+        }
+      } else if (theme === 'dark') {
+        root.classList.add('dark');
+      } else {
+        root.classList.remove('dark');
+      }
+    };
+
+    applyTheme();
+
+    // Listen for system theme changes when in 'system' mode
+    if (theme === 'system') {
+      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+      const handler = () => applyTheme();
+      mediaQuery.addEventListener('change', handler);
+      return () => mediaQuery.removeEventListener('change', handler);
+    }
+  }, [theme]);
+
+  // Settings keyboard shortcut (Ctrl+, or Cmd+,)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === ',') {
+        e.preventDefault();
+        setShowSettings(true);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const handleSelectRepo = async () => {
     try {
@@ -110,6 +157,7 @@ function App() {
     <div className="h-screen flex flex-col bg-white dark:bg-gray-900">
       <Toaster position="bottom-right" />
       <KeyboardShortcutsHelp />
+      <SettingsDialog isOpen={showSettings} onClose={() => setShowSettings(false)} />
 
       {/* Progress Bar */}
       {(isLoading || isOperating) && (
@@ -149,6 +197,13 @@ function App() {
             title="Open terminal at repository location"
           >
             Terminal
+          </button>
+          <button
+            onClick={() => setShowSettings(true)}
+            className="px-3 py-1 text-sm bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600 rounded"
+            title="Settings (Ctrl+,)"
+          >
+            Settings
           </button>
           <button
             onClick={handleSelectRepo}
