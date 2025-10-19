@@ -99,7 +99,23 @@ export const useStore = create<AppStore>((set, get) => ({
     try {
       const response = await api.openRepo({ path });
       if (response.ok && response.data) {
-        set({ repo: response.data, isLoading: false });
+        // Reset all state except settings when opening a new repo
+        set({
+          repo: response.data,
+          isLoading: false,
+          entries: [],
+          currentDiff: null,
+          currentDiffSide: null,
+          selectedPath: null,
+          selectedHunkIndex: null,
+          selectedLineIndices: [],
+          commits: [],
+          hasMore: false,
+          selectedCommit: null,
+          commitDiff: null,
+          selectedCommitFile: null,
+          selectedParent: 0,
+        });
         // Automatically load status
         await get().refreshStatus(response.data.repoId);
         // Subscribe to watch events
@@ -270,7 +286,13 @@ export const useStore = create<AppStore>((set, get) => ({
   },
 
   clearSelection: () => {
-    set({ selectedPath: null, selectedHunkIndex: null, selectedLineIndices: [] });
+    set({
+      selectedPath: null,
+      selectedHunkIndex: null,
+      selectedLineIndices: [],
+      currentDiff: null,
+      currentDiffSide: null
+    });
   },
 
   // UI state

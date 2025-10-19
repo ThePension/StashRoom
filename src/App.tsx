@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { Toaster } from 'sonner';
+import { Settings, FolderOpen, Terminal as TerminalIcon } from 'lucide-react';
 import { useStore } from './state/store';
 import { ChangeList } from './components/ChangeList';
 import { DiffPanel } from './components/DiffPanel';
@@ -186,24 +187,24 @@ function App() {
           )}
           <button
             onClick={handleOpenFolder}
-            className="px-3 py-1 text-sm bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600 rounded"
+            className="p-2 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700 rounded"
             title="Open repository folder in file manager"
           >
-            Open Folder
+            <FolderOpen className="w-5 h-5" />
           </button>
           <button
             onClick={handleOpenTerminal}
-            className="px-3 py-1 text-sm bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600 rounded"
+            className="p-2 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700 rounded"
             title="Open terminal at repository location"
           >
-            Terminal
+            <TerminalIcon className="w-5 h-5" />
           </button>
           <button
             onClick={() => setShowSettings(true)}
-            className="px-3 py-1 text-sm bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600 rounded"
+            className="p-2 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700 rounded"
             title="Settings (Ctrl+,)"
           >
-            Settings
+            <Settings className="w-5 h-5" />
           </button>
           <button
             onClick={handleSelectRepo}
