@@ -16,6 +16,7 @@ export function HistoryPanel() {
   const loadMore = useStore((s) => s.loadMore);
   const selectCommit = useStore((s) => s.selectCommit);
   const selectCommitFile = useStore((s) => s.selectCommitFile);
+  const compactMode = useStore((s) => s.settings.compactMode);
 
   const virtuosoRef = useRef<any>(null);
 
@@ -110,19 +111,19 @@ export function HistoryPanel() {
                 {/* Commit Header */}
                 <div
                   onClick={() => handleSelectCommit(commit)}
-                  className={`px-3 py-2 border-b border-gray-200 dark:border-gray-700 transition-colors cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 ${
+                  className={`${compactMode ? 'px-2 py-1' : 'px-3 py-2'} border-b border-gray-200 dark:border-gray-700 transition-colors cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 ${
                     isSelected ? 'bg-blue-50 dark:bg-blue-900/20 border-l-4 border-l-blue-500' : ''
                   }`}
                 >
                   <div className="flex items-start gap-2">
                     <div className="flex-1 min-w-0">
                       {/* Subject */}
-                      <div className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                      <div className={`${compactMode ? 'text-xs' : 'text-sm'} font-medium text-gray-900 dark:text-gray-100 truncate`}>
                         {commit.subject}
                       </div>
 
                       {/* Author & Time */}
-                      <div className="flex items-center gap-2 mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      <div className={`flex items-center gap-2 ${compactMode ? 'mt-0.5' : 'mt-1'} ${compactMode ? 'text-[10px]' : 'text-xs'} text-gray-500 dark:text-gray-400`}>
                         <span className="truncate">{commit.author.name}</span>
                         <span>•</span>
                         <span>{formatTime(commit.time)}</span>
@@ -144,7 +145,7 @@ export function HistoryPanel() {
                     </div>
 
                     {/* Short OID */}
-                    <div className="text-xs font-mono text-gray-400 dark:text-gray-500 flex-shrink-0">
+                    <div className={`${compactMode ? 'text-[10px]' : 'text-xs'} font-mono text-gray-400 dark:text-gray-500 flex-shrink-0`}>
                       {commit.shortOid}
                     </div>
                   </div>
@@ -155,9 +156,9 @@ export function HistoryPanel() {
                   <div className="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
                     {isLoadingCommitDiff ? (
                       // Loading spinner
-                      <div className="px-6 py-4 flex items-center justify-center gap-2">
+                      <div className={`${compactMode ? 'px-3 py-2' : 'px-6 py-4'} flex items-center justify-center gap-2`}>
                         <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-500 border-t-transparent"></div>
-                        <span className="text-xs text-gray-500 dark:text-gray-400">Loading files...</span>
+                        <span className={`${compactMode ? 'text-[10px]' : 'text-xs'} text-gray-500 dark:text-gray-400`}>Loading files...</span>
                       </div>
                     ) : commitDiff && commitDiff.length > 0 ? (
                       // File list
@@ -169,23 +170,23 @@ export function HistoryPanel() {
                           <div
                             key={fileIndex}
                             onClick={(e) => handleSelectFile(file, e)}
-                            className={`px-6 py-1.5 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors flex items-center gap-2 ${
+                            className={`${compactMode ? 'px-3 py-0.5' : 'px-6 py-1.5'} cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors flex items-center gap-2 ${
                               isFileSelected ? 'bg-gray-200 dark:bg-gray-800' : ''
                             }`}
                           >
-                            <span className={`text-xs font-bold w-4 ${color}`}>{icon}</span>
-                            <span className="text-xs font-mono text-gray-700 dark:text-gray-300 truncate">
+                            <span className={`${compactMode ? 'text-[10px]' : 'text-xs'} font-bold w-4 ${color}`}>{icon}</span>
+                            <span className={`${compactMode ? 'text-[10px]' : 'text-xs'} font-mono text-gray-700 dark:text-gray-300 truncate`}>
                               {file.path}
                             </span>
                             {file.isBinary && (
-                              <span className="text-xs text-gray-500 dark:text-gray-400 italic">binary</span>
+                              <span className={`${compactMode ? 'text-[10px]' : 'text-xs'} text-gray-500 dark:text-gray-400 italic`}>binary</span>
                             )}
                           </div>
                         );
                       })
                     ) : (
                       // No files
-                      <div className="px-6 py-2 text-xs text-gray-500 dark:text-gray-400 italic">
+                      <div className={`${compactMode ? 'px-3 py-1' : 'px-6 py-2'} ${compactMode ? 'text-[10px]' : 'text-xs'} text-gray-500 dark:text-gray-400 italic`}>
                         No files changed
                       </div>
                     )}

@@ -6,6 +6,7 @@ import type { BranchInfo } from '../lib/types';
 
 export function BranchPanel() {
   const repo = useStore((s) => s.repo);
+  const compactMode = useStore((s) => s.settings.compactMode);
   const [branches, setBranches] = useState<BranchInfo[]>([]);
   const [currentBranch, setCurrentBranch] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -82,14 +83,14 @@ export function BranchPanel() {
   return (
     <div className="h-full flex flex-col border-l border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
       {/* Header */}
-      <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+      <div className={`${compactMode ? 'px-2 py-1.5' : 'px-4 py-3'} border-b border-gray-200 dark:border-gray-700`}>
         <div className="flex items-center justify-between gap-2">
-          <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+          <h3 className={`${compactMode ? 'text-xs' : 'text-sm'} font-semibold text-gray-900 dark:text-gray-100`}>
             Branches
           </h3>
           {currentBranch && (
             <span
-              className="text-xs px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 font-mono max-w-[150px] truncate"
+              className={`${compactMode ? 'text-[10px] px-1.5 py-0' : 'text-xs px-2 py-0.5'} rounded-full bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 font-mono max-w-[150px] truncate`}
               title={currentBranch}
             >
               {currentBranch}
@@ -114,7 +115,7 @@ export function BranchPanel() {
               <div
                 key={branch.name}
                 onClick={() => !branch.isHead && !isSwitching && handleSwitchBranch(branch)}
-                className={`px-4 py-2 transition-colors ${
+                className={`${compactMode ? 'px-2 py-1' : 'px-4 py-2'} transition-colors ${
                   branch.isHead
                     ? 'bg-gray-50 dark:bg-gray-800 cursor-default'
                     : 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800'
@@ -124,11 +125,11 @@ export function BranchPanel() {
                 title={branch.name}
               >
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-sm font-mono text-gray-700 dark:text-gray-300 truncate">
+                  <span className={`${compactMode ? 'text-xs' : 'text-sm'} font-mono text-gray-700 dark:text-gray-300 truncate`}>
                     {branch.name}
                   </span>
                   {branch.isHead && (
-                    <span className="text-xs px-1.5 py-0.5 rounded bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 flex-shrink-0">
+                    <span className={`${compactMode ? 'text-[10px] px-1 py-0' : 'text-xs px-1.5 py-0.5'} rounded bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 flex-shrink-0`}>
                       current
                     </span>
                   )}

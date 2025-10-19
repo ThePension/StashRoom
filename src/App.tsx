@@ -17,6 +17,7 @@ function App() {
   const isOperating = useStore((s) => s.isOperating);
   const openRepo = useStore((s) => s.openRepo);
   const theme = useStore((s) => s.settings.theme);
+  const compactMode = useStore((s) => s.settings.compactMode);
   const [showHistory, setShowHistory] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
 
@@ -166,12 +167,12 @@ function App() {
       )}
 
       {/* Header */}
-      <header className="flex items-center justify-between px-4 py-3 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+      <header className={`flex items-center justify-between ${compactMode ? 'px-2 py-1.5' : 'px-4 py-3'} bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700`}>
         <div className="flex items-center gap-4">
-          <h1 className="text-xl font-bold text-gray-800 dark:text-gray-100">
+          <h1 className={`${compactMode ? 'text-base' : 'text-xl'} font-bold text-gray-800 dark:text-gray-100`}>
             StashRoom
           </h1>
-          <div className="text-sm text-gray-600 dark:text-gray-400">
+          <div className={`${compactMode ? 'text-xs' : 'text-sm'} text-gray-600 dark:text-gray-400`}>
             <span className="font-mono">{repo.path}</span>
           </div>
         </div>
@@ -179,7 +180,7 @@ function App() {
         <div className="flex items-center gap-2">
           {repo.head?.branch && (
             <div
-              className="px-3 py-1 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded text-sm font-mono max-w-[200px] truncate"
+              className={`${compactMode ? 'px-2 py-0.5 text-xs' : 'px-3 py-1 text-sm'} bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded font-mono max-w-[200px] truncate`}
               title={repo.head.branch}
             >
               {repo.head.branch}
@@ -187,28 +188,28 @@ function App() {
           )}
           <button
             onClick={handleOpenFolder}
-            className="p-2 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700 rounded"
+            className={`${compactMode ? 'p-1' : 'p-2'} text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700 rounded`}
             title="Open repository folder in file manager"
           >
-            <FolderOpen className="w-5 h-5" />
+            <FolderOpen className={compactMode ? 'w-4 h-4' : 'w-5 h-5'} />
           </button>
           <button
             onClick={handleOpenTerminal}
-            className="p-2 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700 rounded"
+            className={`${compactMode ? 'p-1' : 'p-2'} text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700 rounded`}
             title="Open terminal at repository location"
           >
-            <TerminalIcon className="w-5 h-5" />
+            <TerminalIcon className={compactMode ? 'w-4 h-4' : 'w-5 h-5'} />
           </button>
           <button
             onClick={() => setShowSettings(true)}
-            className="p-2 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700 rounded"
+            className={`${compactMode ? 'p-1' : 'p-2'} text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700 rounded`}
             title="Settings (Ctrl+,)"
           >
-            <Settings className="w-5 h-5" />
+            <Settings className={compactMode ? 'w-4 h-4' : 'w-5 h-5'} />
           </button>
           <button
             onClick={handleSelectRepo}
-            className="px-3 py-1 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
+            className={`${compactMode ? 'px-2 py-0.5 text-xs' : 'px-3 py-1 text-sm'} text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200`}
           >
             Change Repo
           </button>
@@ -225,11 +226,11 @@ function App() {
               <Panel defaultSize={70} minSize={30}>
                 <div className="h-full flex flex-col border-r border-gray-200 dark:border-gray-700">
                   {/* Tab Header */}
-                  <div className="px-4 py-2 bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
-                    <div className="flex items-center gap-2 mb-1">
+                  <div className={`${compactMode ? 'px-2 py-1' : 'px-4 py-2'} bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700`}>
+                    <div className={`flex items-center gap-2 ${compactMode ? 'mb-0.5' : 'mb-1'}`}>
                       <button
                         onClick={() => setShowHistory(false)}
-                        className={`px-3 py-1 text-sm rounded ${
+                        className={`${compactMode ? 'px-2 py-0.5 text-xs' : 'px-3 py-1 text-sm'} rounded ${
                           !showHistory
                             ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 font-semibold'
                             : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'
@@ -239,7 +240,7 @@ function App() {
                       </button>
                       <button
                         onClick={() => setShowHistory(true)}
-                        className={`px-3 py-1 text-sm rounded ${
+                        className={`${compactMode ? 'px-2 py-0.5 text-xs' : 'px-3 py-1 text-sm'} rounded ${
                           showHistory
                             ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 font-semibold'
                             : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'
@@ -249,11 +250,11 @@ function App() {
                       </button>
                     </div>
                     {!showHistory ? (
-                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                      <p className={`${compactMode ? 'text-[10px]' : 'text-xs'} text-gray-500 dark:text-gray-400`}>
                         ↑↓ navigate • Enter view • S stage • D discard
                       </p>
                     ) : (
-                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                      <p className={`${compactMode ? 'text-[10px]' : 'text-xs'} text-gray-500 dark:text-gray-400`}>
                         Click commit to view diff
                       </p>
                     )}

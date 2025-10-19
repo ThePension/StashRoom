@@ -12,6 +12,7 @@ export function DiffPanel() {
   const setIsOperating = useStore((s) => s.setIsOperating);
   const entries = useStore((s) => s.entries);
   const showLineNumbers = useStore((s) => s.settings.showLineNumbers);
+  const compactMode = useStore((s) => s.settings.compactMode);
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
@@ -305,7 +306,7 @@ export function DiffPanel() {
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="px-4 py-2 bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
+      <div className={`${compactMode ? 'px-2 py-1' : 'px-4 py-2'} bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 flex-shrink-0`}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="text-sm font-mono text-gray-600 dark:text-gray-400">
@@ -347,7 +348,7 @@ export function DiffPanel() {
             onContextMenu={!isCommitDiff && !currentDiff?.isNew && !isStagedNewFile ? (e) => handleContextMenu(e, hunkIndex) : undefined}
           >
             {/* Hunk header */}
-            <div className="px-4 py-1 bg-blue-50 dark:bg-blue-900/20 text-xs font-mono text-blue-600 dark:text-blue-400 flex items-center justify-between">
+            <div className={`${compactMode ? 'px-2 py-0.5' : 'px-4 py-1'} bg-blue-50 dark:bg-blue-900/20 ${compactMode ? 'text-[10px]' : 'text-xs'} font-mono text-blue-600 dark:text-blue-400 flex items-center justify-between`}>
               <span>{hunk.header}</span>
               {!isCommitDiff && !currentDiff?.isNew && !isStagedNewFile && (
                 <div className="flex items-center gap-2">
@@ -370,7 +371,7 @@ export function DiffPanel() {
             </div>
 
             {/* Hunk lines */}
-            <div className="font-mono text-xs select-none">
+            <div className={`font-mono ${compactMode ? 'text-[10px]' : 'text-xs'} select-none`}>
               {hunk.lines.map((line, lineIndex) => {
                 // Handle both FileDiff (working tree) and CommitFileDiff (history) line types
                 const origin = isCommitDiff
@@ -384,8 +385,8 @@ export function DiffPanel() {
                 const isAddedLine = origin === '+' && !isViewingStaged && !isCommitDiff;
 
                 // Build className string more cleanly
-                let lineClasses = `py-0.5 ${wrapLines ? 'whitespace-pre-wrap break-all' : 'whitespace-pre'} transition-colors`;
-                lineClasses += showLineNumbers ? ' pl-2 pr-4' : ' px-4';
+                let lineClasses = `${compactMode ? 'py-0' : 'py-0.5'} ${wrapLines ? 'whitespace-pre-wrap break-all' : 'whitespace-pre'} transition-colors`;
+                lineClasses += showLineNumbers ? (compactMode ? ' pl-1 pr-2' : ' pl-2 pr-4') : (compactMode ? ' px-2' : ' px-4');
 
                 if (isSelected && !isCommitDiff) {
                   // Selected state - always blue with consistent styling

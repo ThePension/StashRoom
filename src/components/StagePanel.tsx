@@ -10,6 +10,7 @@ export function StagePanel() {
   const setIsOperating = useStore((s) => s.setIsOperating);
   const refreshStatus = useStore((s) => s.refreshStatus);
   const clearSelection = useStore((s) => s.clearSelection);
+  const compactMode = useStore((s) => s.settings.compactMode);
 
   // Filter staged entries (memoized to prevent infinite loops)
   const stagedEntries = useMemo(() => {
@@ -54,8 +55,8 @@ export function StagePanel() {
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="px-4 py-2 bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
-        <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+      <div className={`${compactMode ? 'px-2 py-1' : 'px-4 py-2'} bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 flex-shrink-0`}>
+        <h3 className={`${compactMode ? 'text-xs' : 'text-sm'} font-semibold text-gray-700 dark:text-gray-300`}>
           Staged Changes ({stagedEntries.length})
         </h3>
       </div>
@@ -66,18 +67,18 @@ export function StagePanel() {
       </div>
 
       {/* Commit Box */}
-      <div className="p-4 bg-gray-50 dark:bg-gray-900 flex-shrink-0">
-        <div className="mb-3">
+      <div className={`${compactMode ? 'p-2' : 'p-4'} bg-gray-50 dark:bg-gray-900 flex-shrink-0`}>
+        <div className={compactMode ? 'mb-2' : 'mb-3'}>
           <label
             htmlFor="commit-message"
-            className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+            className={`block ${compactMode ? 'text-xs' : 'text-sm'} font-medium text-gray-700 dark:text-gray-300 ${compactMode ? 'mb-1' : 'mb-2'}`}
           >
             Commit Message
           </label>
           <textarea
             id="commit-message"
-            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-800 dark:text-gray-100 font-mono text-sm resize-none"
-            rows={4}
+            className={`w-full ${compactMode ? 'px-2 py-1' : 'px-3 py-2'} border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-800 dark:text-gray-100 font-mono ${compactMode ? 'text-xs' : 'text-sm'} resize-none`}
+            rows={compactMode ? 3 : 4}
             placeholder="Enter commit message..."
             value={commitMessage}
             onChange={(e) => setCommitMessage(e.target.value)}
@@ -86,13 +87,13 @@ export function StagePanel() {
         </div>
 
         <div className="flex items-center justify-between">
-          <div className="text-xs text-gray-500 dark:text-gray-400">
+          <div className={`${compactMode ? 'text-[10px]' : 'text-xs'} text-gray-500 dark:text-gray-400`}>
             {stagedEntries.length} file(s) staged
           </div>
           <button
             onClick={handleCommit}
             disabled={isCommitting || !commitMessage.trim() || !stagedEntries.length}
-            className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+            className={`${compactMode ? 'px-2 py-1 text-xs' : 'px-4 py-2 text-sm'} bg-blue-500 text-white rounded-md hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed font-medium`}
           >
             {isCommitting ? 'Committing...' : 'Commit'}
           </button>

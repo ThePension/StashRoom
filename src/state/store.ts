@@ -55,6 +55,7 @@ interface Settings {
   showLineNumbers: boolean;
   theme: 'light' | 'dark' | 'system';
   contextLines: number | 'all'; // number of context lines or 'all' for whole file
+  compactMode: boolean;
 }
 
 interface SettingsState {
@@ -307,6 +308,7 @@ export const useStore = create<AppStore>((set, get) => ({
     showLineNumbers: false,
     theme: 'system',
     contextLines: 3,
+    compactMode: false,
   },
 
   updateSettings: (newSettings: Partial<Settings>) => {

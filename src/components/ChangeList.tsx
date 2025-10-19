@@ -18,6 +18,7 @@ export function ChangeList({ type }: ChangeListProps) {
   const loadDiff = useStore((s) => s.loadDiff);
   const selectCommitFile = useStore((s) => s.selectCommitFile);
   const setIsOperating = useStore((s) => s.setIsOperating);
+  const compactMode = useStore((s) => s.settings.compactMode);
   const { confirm, ConfirmDialog } = useConfirm();
 
   // Filter entries based on type (memoized to prevent infinite loops)
@@ -297,7 +298,7 @@ export function ChangeList({ type }: ChangeListProps) {
           return (
             <div
               className={`
-                px-3 py-1.5 cursor-pointer select-none text-sm font-mono
+                ${compactMode ? 'px-2 py-0.5' : 'px-3 py-1.5'} cursor-pointer select-none ${compactMode ? 'text-xs' : 'text-sm'} font-mono
                 text-gray-700 dark:text-gray-300
                 hover:bg-gray-100 dark:hover:bg-gray-800
                 ${isSelected ? 'bg-blue-50 dark:bg-blue-900/20 border-l-2 border-blue-500' : ''}
