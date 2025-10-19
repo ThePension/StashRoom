@@ -153,18 +153,31 @@ export function ChangeList({ type }: ChangeListProps) {
   const handleDiscard = async (entry: StatusEntry) => {
     if (!repo) return;
 
+    const discardedPath = entry.path;
     setIsOperating(true);
     try {
       const response = await api.discard({
         repoId: repo.repoId,
-        path: entry.path,
+        path: discardedPath,
         hunks: null,
       });
 
       if (response.ok && response.data) {
+        // Update the status first
         useStore.getState().updateStatus(response.data);
-        useStore.getState().clearDiff();
-        toast.success(`Discarded changes to ${entry.path}`);
+
+        // Check if the file still has unstaged changes in the updated status
+        const fileStillInUnstaged = response.data.entries.some(
+          e => e.path === discardedPath && (e.unstagedStatus !== null || e.untracked)
+        );
+
+        // Clear selection and diff if file no longer has unstaged changes
+        if (!fileStillInUnstaged && selectedPath === discardedPath) {
+          setSelectedPath(null);
+          useStore.getState().clearDiff();
+        }
+
+        toast.success(`Discarded changes to ${discardedPath}`);
       } else {
         toast.error(response.message || 'Failed to discard changes');
       }
@@ -185,6 +198,13 @@ export function ChangeList({ type }: ChangeListProps) {
       if (response.ok && response.data) {
         useStore.getState().updateStatus(response.data);
         useStore.getState().clearDiff();
+
+        // Clear selected path if the file is no longer in the entries
+        const fileStillExists = response.data.entries.some(e => e.path === entry.path);
+        if (!fileStillExists) {
+          setSelectedPath(null);
+        }
+
         toast.success(`Deleted ${entry.path}`);
       } else {
         toast.error(response.message || 'Failed to delete file');

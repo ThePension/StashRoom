@@ -10,6 +10,7 @@ export function DiffPanel() {
   const selectedPath = useStore((s) => s.selectedPath);
   const selectedCommitFile = useStore((s) => s.selectedCommitFile);
   const setIsOperating = useStore((s) => s.setIsOperating);
+  const entries = useStore((s) => s.entries);
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
@@ -28,6 +29,10 @@ export function DiffPanel() {
 
   // Determine if we're viewing staged changes based on which diff side we loaded
   const isViewingStaged = currentDiffSide === 'index';
+
+  // Check if the current file is a newly added file (for staged view)
+  const currentEntry = entries.find(e => e.path === selectedPath);
+  const isStagedNewFile = isViewingStaged && currentEntry?.stagedStatus === 'added';
 
   // Clear selection when diff changes
   useEffect(() => {
@@ -338,12 +343,12 @@ export function DiffPanel() {
           <div
             key={hunkIndex}
             className="border-b border-gray-200 dark:border-gray-700"
-            onContextMenu={!isCommitDiff ? (e) => handleContextMenu(e, hunkIndex) : undefined}
+            onContextMenu={!isCommitDiff && !currentDiff?.isNew && !isStagedNewFile ? (e) => handleContextMenu(e, hunkIndex) : undefined}
           >
             {/* Hunk header */}
             <div className="px-4 py-1 bg-blue-50 dark:bg-blue-900/20 text-xs font-mono text-blue-600 dark:text-blue-400 flex items-center justify-between">
               <span>{hunk.header}</span>
-              {!isCommitDiff && (
+              {!isCommitDiff && !currentDiff?.isNew && !isStagedNewFile && (
                 <div className="flex items-center gap-2">
                   {selectedLines.get(hunkIndex)?.size ? (
                     <button

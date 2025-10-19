@@ -43,10 +43,43 @@ fn discard_file(repo: &Repository, path: &str) -> Result<()> {
     let tree = commit.tree()?;
 
     if let Ok(entry) = tree.get_path(Path::new(path)) {
-        // File exists in HEAD, restore it from there
-        let blob = repo.find_blob(entry.id())?;
-        fs::write(&file_path, blob.content())
-            .context("Failed to write restored file")?;
+        // File exists in HEAD, use Git's checkout functionality to restore it
+        // This is equivalent to 'git checkout HEAD -- <path>'
+        let tree_obj = commit.as_object();
+        repo.checkout_tree(
+            tree_obj,
+            Some(
+                git2::build::CheckoutBuilder::new()
+                    .path(path)
+                    .force()
+                    .remove_untracked(false),
+            ),
+        )
+        .context("Failed to checkout file from HEAD")?;
+
+        // Update the index to match HEAD for this file
+        // This ensures the file is no longer staged
+        let mut index = repo.index()?;
+        let head_tree = commit.tree()?;
+        let head_entry = head_tree.get_path(Path::new(path))?;
+
+        // Remove existing index entry and add from HEAD
+        let _ = index.remove_path(Path::new(path));
+        index.add(&git2::IndexEntry {
+            ctime: git2::IndexTime::new(0, 0),
+            mtime: git2::IndexTime::new(0, 0),
+            dev: 0,
+            ino: 0,
+            mode: head_entry.filemode() as u32,
+            uid: 0,
+            gid: 0,
+            file_size: 0,
+            id: head_entry.id(),
+            flags: path.len().min(0xfff) as u16,
+            flags_extended: 0,
+            path: path.as_bytes().to_vec(),
+        })?;
+        index.write()?;
     } else {
         // File doesn't exist in HEAD (it's new), so delete it
         if file_path.exists() {
@@ -324,5 +357,178 @@ mod tests {
             fs::read_to_string(&file_path).unwrap(),
             "Modified content"
         );
+    }
+
+    #[test]
+    fn test_discard_removes_file_from_status() {
+        let (temp_dir, repo) = create_test_repo();
+
+        // Create and commit a file
+        let file_path = temp_dir.path().join("file.txt");
+        fs::write(&file_path, "Original content").unwrap();
+
+        let mut index = repo.index().unwrap();
+        index.add_path(Path::new("file.txt")).unwrap();
+        index.write().unwrap();
+
+        let tree_id = index.write_tree().unwrap();
+        let tree = repo.find_tree(tree_id).unwrap();
+        let signature = git2::Signature::now("Test User", "test@example.com").unwrap();
+        let parent = repo.head().unwrap().peel_to_commit().unwrap();
+
+        repo.commit(
+            Some("HEAD"),
+            &signature,
+            &signature,
+            "Add file.txt",
+            &tree,
+            &[&parent],
+        )
+        .unwrap();
+
+        // Modify the file
+        fs::write(&file_path, "Modified content").unwrap();
+
+        // Verify file appears in status before discard
+        let status_before = crate::core::status::get_status(&repo).unwrap();
+        assert_eq!(status_before.entries.len(), 1);
+        assert_eq!(status_before.entries[0].path, "file.txt");
+        assert_eq!(status_before.entries[0].unstaged_status, Some("modified".to_string()));
+
+        // Discard changes
+        let status_after = discard(&repo, "file.txt", None).unwrap();
+
+        // Verify file no longer appears in status (no changes)
+        assert_eq!(status_after.entries.len(), 0, "File should not appear in status after discard");
+    }
+
+    #[test]
+    fn test_discard_staged_and_unstaged_changes() {
+        let (temp_dir, repo) = create_test_repo();
+
+        // Create and commit a file
+        let file_path = temp_dir.path().join("file.txt");
+        fs::write(&file_path, "Original content").unwrap();
+
+        let mut index = repo.index().unwrap();
+        index.add_path(Path::new("file.txt")).unwrap();
+        index.write().unwrap();
+
+        let tree_id = index.write_tree().unwrap();
+        let tree = repo.find_tree(tree_id).unwrap();
+        let signature = git2::Signature::now("Test User", "test@example.com").unwrap();
+        let parent = repo.head().unwrap().peel_to_commit().unwrap();
+
+        repo.commit(
+            Some("HEAD"),
+            &signature,
+            &signature,
+            "Add file.txt",
+            &tree,
+            &[&parent],
+        )
+        .unwrap();
+
+        // Modify and stage the file
+        fs::write(&file_path, "Staged content").unwrap();
+        let mut index = repo.index().unwrap();
+        index.add_path(Path::new("file.txt")).unwrap();
+        index.write().unwrap();
+
+        // Modify again (unstaged)
+        fs::write(&file_path, "Unstaged content").unwrap();
+
+        // Verify both staged and unstaged changes exist
+        let status_before = crate::core::status::get_status(&repo).unwrap();
+        assert_eq!(status_before.entries.len(), 1);
+        assert_eq!(status_before.entries[0].staged_status, Some("modified".to_string()));
+        assert_eq!(status_before.entries[0].unstaged_status, Some("modified".to_string()));
+
+        // Discard changes (should restore working tree to HEAD and reset index)
+        let status_after = discard(&repo, "file.txt", None).unwrap();
+
+        // Verify file is completely clean
+        assert_eq!(status_after.entries.len(), 0, "File should have no changes after discard");
+
+        // Verify file content is back to original
+        let content = fs::read_to_string(&file_path).unwrap();
+        assert_eq!(content, "Original content");
+    }
+
+    #[test]
+    fn test_discard_preserves_other_files_status() {
+        let (temp_dir, repo) = create_test_repo();
+
+        // Create and commit two files
+        let file1_path = temp_dir.path().join("file1.txt");
+        let file2_path = temp_dir.path().join("file2.txt");
+        fs::write(&file1_path, "File 1 original").unwrap();
+        fs::write(&file2_path, "File 2 original").unwrap();
+
+        let mut index = repo.index().unwrap();
+        index.add_path(Path::new("file1.txt")).unwrap();
+        index.add_path(Path::new("file2.txt")).unwrap();
+        index.write().unwrap();
+
+        let tree_id = index.write_tree().unwrap();
+        let tree = repo.find_tree(tree_id).unwrap();
+        let signature = git2::Signature::now("Test User", "test@example.com").unwrap();
+        let parent = repo.head().unwrap().peel_to_commit().unwrap();
+
+        repo.commit(
+            Some("HEAD"),
+            &signature,
+            &signature,
+            "Add files",
+            &tree,
+            &[&parent],
+        )
+        .unwrap();
+
+        // Modify both files
+        fs::write(&file1_path, "File 1 modified").unwrap();
+        fs::write(&file2_path, "File 2 modified").unwrap();
+
+        // Verify both files appear in status
+        let status_before = crate::core::status::get_status(&repo).unwrap();
+        assert_eq!(status_before.entries.len(), 2);
+
+        // Discard only file1
+        let status_after = discard(&repo, "file1.txt", None).unwrap();
+
+        // Verify file1 is clean but file2 still has changes
+        assert_eq!(status_after.entries.len(), 1);
+        assert_eq!(status_after.entries[0].path, "file2.txt");
+        assert_eq!(status_after.entries[0].unstaged_status, Some("modified".to_string()));
+
+        // Verify file1 is restored
+        let content1 = fs::read_to_string(&file1_path).unwrap();
+        assert_eq!(content1, "File 1 original");
+
+        // Verify file2 is still modified
+        let content2 = fs::read_to_string(&file2_path).unwrap();
+        assert_eq!(content2, "File 2 modified");
+    }
+
+    #[test]
+    fn test_discard_new_file_removes_from_status() {
+        let (temp_dir, repo) = create_test_repo();
+
+        // Create a new untracked file
+        let file_path = temp_dir.path().join("new_file.txt");
+        fs::write(&file_path, "New content").unwrap();
+
+        // Verify file appears in status as untracked
+        let status_before = crate::core::status::get_status(&repo).unwrap();
+        assert_eq!(status_before.entries.len(), 1);
+        assert_eq!(status_before.entries[0].path, "new_file.txt");
+        assert!(status_before.entries[0].untracked);
+
+        // Discard the new file (should delete it)
+        let status_after = discard(&repo, "new_file.txt", None).unwrap();
+
+        // Verify file is deleted and no longer in status
+        assert!(!file_path.exists());
+        assert_eq!(status_after.entries.len(), 0);
     }
 }
