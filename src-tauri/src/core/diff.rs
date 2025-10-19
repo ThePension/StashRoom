@@ -6,10 +6,14 @@ use std::path::Path;
 use crate::types::{DiffHunk, DiffLine, DiffSide, FileDiff};
 
 /// Generates a diff for a specific file based on the specified side
-pub fn get_diff(repo: &Repository, path: &str, side: &DiffSide) -> Result<FileDiff> {
+pub fn get_diff(repo: &Repository, path: &str, side: &DiffSide, context_lines: Option<u32>) -> Result<FileDiff> {
     let mut opts = DiffOptions::new();
     opts.pathspec(path);
-    opts.context_lines(3);
+
+    // Set context lines: None means show whole file (use a very large number)
+    let context = context_lines.unwrap_or(1000000);
+    opts.context_lines(context);
+
     // Disable text conversion to preserve CRLF exactly as stored
     opts.disable_pathspec_match(false);
     opts.ignore_whitespace_change(false);
@@ -220,7 +224,7 @@ mod tests {
         let file_path = temp_dir.path().join("new_file.txt");
         fs::write(&file_path, "Line 1\nLine 2\nLine 3\n").unwrap();
 
-        let diff = get_diff(&repo, "new_file.txt", &DiffSide::Working).unwrap();
+        let diff = get_diff(&repo, "new_file.txt", &DiffSide::Working, Some(3)).unwrap();
 
         assert_eq!(diff.path, "new_file.txt");
         assert!(!diff.is_binary);
@@ -264,7 +268,7 @@ mod tests {
         // Modify the file
         fs::write(&file_path, "Line 1\nModified Line 2\nLine 3\n").unwrap();
 
-        let diff = get_diff(&repo, "file.txt", &DiffSide::Working).unwrap();
+        let diff = get_diff(&repo, "file.txt", &DiffSide::Working, Some(3)).unwrap();
 
         assert_eq!(diff.path, "file.txt");
         assert!(!diff.is_binary);
@@ -313,7 +317,7 @@ mod tests {
         index.add_path(Path::new("file.txt")).unwrap();
         index.write().unwrap();
 
-        let diff = get_diff(&repo, "file.txt", &DiffSide::Index).unwrap();
+        let diff = get_diff(&repo, "file.txt", &DiffSide::Index, Some(3)).unwrap();
 
         assert_eq!(diff.path, "file.txt");
         assert!(!diff.is_binary);

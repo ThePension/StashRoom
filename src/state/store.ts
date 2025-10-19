@@ -54,6 +54,7 @@ interface UIState {
 interface Settings {
   showLineNumbers: boolean;
   theme: 'light' | 'dark' | 'system';
+  contextLines: number | 'all'; // number of context lines or 'all' for whole file
 }
 
 interface SettingsState {
@@ -230,7 +231,10 @@ export const useStore = create<AppStore>((set, get) => ({
   loadDiff: async (repoId: string, path: string, side: 'working' | 'index' | 'head') => {
     set({ isLoading: true });
     try {
-      const response = await api.getDiff({ repoId, path, side });
+      const { contextLines } = get().settings;
+      const contextLinesParam = contextLines === 'all' ? null : contextLines;
+
+      const response = await api.getDiff({ repoId, path, side, contextLines: contextLinesParam });
       if (response.ok && response.data) {
         set({ currentDiff: response.data, currentDiffSide: side, isLoading: false });
       } else {
@@ -280,6 +284,7 @@ export const useStore = create<AppStore>((set, get) => ({
   settings: {
     showLineNumbers: false,
     theme: 'system',
+    contextLines: 3,
   },
 
   updateSettings: (newSettings: Partial<Settings>) => {

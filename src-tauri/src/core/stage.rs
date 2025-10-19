@@ -59,7 +59,7 @@ fn validate_line_selection(
     hunk_index: usize,
     line_indices: &[usize],
 ) -> Result<()> {
-    let file_diff = get_diff(repo, path, &DiffSide::Working)?;
+    let file_diff = get_diff(repo, path, &DiffSide::Working, Some(3))?;
 
     if hunk_index >= file_diff.hunks.len() {
         anyhow::bail!("Hunk index {} out of bounds", hunk_index);
@@ -109,7 +109,7 @@ fn validate_line_selection(
 /// Internal implementation for staging a hunk
 fn stage_hunk_impl(repo: &Repository, path: &str, hunk_index: usize) -> Result<()> {
     // Get the working tree diff
-    let file_diff = get_diff(repo, path, &DiffSide::Working)?;
+    let file_diff = get_diff(repo, path, &DiffSide::Working, Some(3))?;
 
     // Validate that the file has changes
     if file_diff.hunks.is_empty() {
@@ -134,7 +134,7 @@ fn stage_hunk_impl(repo: &Repository, path: &str, hunk_index: usize) -> Result<(
 /// Internal implementation for unstaging a hunk
 fn unstage_hunk_impl(repo: &Repository, path: &str, hunk_index: usize) -> Result<()> {
     // Get the staged diff
-    let file_diff = get_diff(repo, path, &DiffSide::Index)?;
+    let file_diff = get_diff(repo, path, &DiffSide::Index, Some(3))?;
 
     if hunk_index >= file_diff.hunks.len() {
         anyhow::bail!("Hunk index {} out of bounds", hunk_index);
@@ -161,7 +161,7 @@ fn stage_lines_impl(
     line_indices: &[usize],
 ) -> Result<()> {
     // Get the working tree diff
-    let file_diff = get_diff(repo, path, &DiffSide::Working)?;
+    let file_diff = get_diff(repo, path, &DiffSide::Working, Some(3))?;
 
     let hunk = &file_diff.hunks[hunk_index];
 
@@ -594,7 +594,7 @@ mod tests {
         create_file_with_content(&temp_dir, "test.txt", modified_content);
 
         // Get the diff to find added line indices
-        let diff = get_diff(&repo, "test.txt", &DiffSide::Working).unwrap();
+        let diff = get_diff(&repo, "test.txt", &DiffSide::Working, Some(3)).unwrap();
         assert!(!diff.hunks.is_empty());
 
         let hunk = &diff.hunks[0];
@@ -638,7 +638,7 @@ mod tests {
         create_file_with_content(&temp_dir, "test.txt", modified_content);
 
         // Get the diff
-        let diff = get_diff(&repo, "test.txt", &DiffSide::Working).unwrap();
+        let diff = get_diff(&repo, "test.txt", &DiffSide::Working, Some(3)).unwrap();
         let hunk = &diff.hunks[0];
 
         // Find indices for mixed add/delete lines
@@ -673,7 +673,7 @@ mod tests {
         create_file_with_content(&temp_dir, "test.txt", modified_content);
 
         // Get the diff
-        let diff = get_diff(&repo, "test.txt", &DiffSide::Working).unwrap();
+        let diff = get_diff(&repo, "test.txt", &DiffSide::Working, Some(3)).unwrap();
         let hunk = &diff.hunks[0];
 
         // Find a context line
@@ -782,7 +782,7 @@ mod tests {
         create_file_with_content(&temp_dir, "test.txt", modified_content);
 
         // Get the diff and build a patch
-        let diff = get_diff(&repo, "test.txt", &DiffSide::Working).unwrap();
+        let diff = get_diff(&repo, "test.txt", &DiffSide::Working, Some(3)).unwrap();
         let patch = build_patch("test.txt", &diff.hunks[0], None).unwrap();
 
         // Snapshot the patch
@@ -802,7 +802,7 @@ mod tests {
         create_file_with_content(&temp_dir, "test.txt", modified_content);
 
         // Get the diff
-        let diff = get_diff(&repo, "test.txt", &DiffSide::Working).unwrap();
+        let diff = get_diff(&repo, "test.txt", &DiffSide::Working, Some(3)).unwrap();
         let hunk = &diff.hunks[0];
 
         // Get only the first added line
@@ -1115,7 +1115,7 @@ mod tests {
         create_file_with_content(&temp_dir, "test.txt", &modified);
 
         // Get diff to verify we have multiple hunks
-        let diff = get_diff(&repo, "test.txt", &DiffSide::Working).unwrap();
+        let diff = get_diff(&repo, "test.txt", &DiffSide::Working, Some(3)).unwrap();
         assert!(diff.hunks.len() >= 2, "Should have at least 2 hunks, got {}", diff.hunks.len());
 
         // Stage only the second hunk (index 1)
@@ -1160,7 +1160,7 @@ mod tests {
 
         create_file_with_content(&temp_dir, "test.txt", &modified);
 
-        let diff = get_diff(&repo, "test.txt", &DiffSide::Working).unwrap();
+        let diff = get_diff(&repo, "test.txt", &DiffSide::Working, Some(3)).unwrap();
         assert!(diff.hunks.len() >= 2, "Expected at least 2 hunks, got {}", diff.hunks.len());
 
         // Stage hunk 2, then hunk 0
@@ -1182,7 +1182,7 @@ mod tests {
         let modified = "A\nb\n\nd\nE\n\ng\nH\n";
         create_file_with_content(&temp_dir, "test.txt", modified);
 
-        let diff = get_diff(&repo, "test.txt", &DiffSide::Working).unwrap();
+        let diff = get_diff(&repo, "test.txt", &DiffSide::Working, Some(3)).unwrap();
         let hunk_count = diff.hunks.len();
 
         // Stage all hunks one by one
@@ -1222,7 +1222,7 @@ mod tests {
         stage_file(&repo, "test.txt").unwrap();
 
         // Get the staged diff to check hunk count
-        let diff = get_diff(&repo, "test.txt", &DiffSide::Index).unwrap();
+        let diff = get_diff(&repo, "test.txt", &DiffSide::Index, Some(3)).unwrap();
         if diff.hunks.len() >= 2 {
             // Unstage only first hunk
             stage_hunk(&repo, "test.txt", 0, true).unwrap();
@@ -1262,7 +1262,7 @@ mod tests {
         create_file_with_content(&temp_dir, "test.txt", modified2);
 
         // Stage the new hunk
-        let diff = get_diff(&repo, "test.txt", &DiffSide::Working).unwrap();
+        let diff = get_diff(&repo, "test.txt", &DiffSide::Working, Some(3)).unwrap();
         if !diff.hunks.is_empty() {
             stage_hunk(&repo, "test.txt", 0, false).unwrap();
         }
@@ -1303,7 +1303,7 @@ mod tests {
         let modified = "mod 1\nline 2\nline 3\nmod 4\n";
         create_file_with_content(&temp_dir, "test.txt", modified);
 
-        let diff = get_diff(&repo, "test.txt", &DiffSide::Working).unwrap();
+        let diff = get_diff(&repo, "test.txt", &DiffSide::Working, Some(3)).unwrap();
         if diff.hunks.len() >= 2 {
             // Stage first hunk
             stage_hunk(&repo, "test.txt", 0, false).unwrap();
@@ -1313,7 +1313,7 @@ mod tests {
             create_file_with_content(&temp_dir, "test.txt", modified2);
 
             // Try to stage second hunk - should still work
-            let diff2 = get_diff(&repo, "test.txt", &DiffSide::Working).unwrap();
+            let diff2 = get_diff(&repo, "test.txt", &DiffSide::Working, Some(3)).unwrap();
             if !diff2.hunks.is_empty() {
                 let result = stage_hunk(&repo, "test.txt", 0, false);
                 assert!(result.is_ok() || result.is_err()); // Either outcome is acceptable
@@ -1465,7 +1465,7 @@ mod tests {
         // Since they're identical, there should be no hunks, and our validation should catch it
 
         // First verify that get_diff returns no hunks for an unchanged file
-        let diff = get_diff(&repo, "test.txt", &DiffSide::Working).unwrap();
+        let diff = get_diff(&repo, "test.txt", &DiffSide::Working, Some(3)).unwrap();
 
         if diff.hunks.is_empty() {
             // If there are no hunks, stage_hunk should error
@@ -1494,7 +1494,7 @@ mod tests {
         let modified = "line 1\nline 2\nmod 3\nline 4\nmod 5\nline 6\nmod 7\n";
         create_file_with_content(&temp_dir, "test.txt", modified);
 
-        let diff = get_diff(&repo, "test.txt", &DiffSide::Working).unwrap();
+        let diff = get_diff(&repo, "test.txt", &DiffSide::Working, Some(3)).unwrap();
         if !diff.hunks.is_empty() {
             let hunk = &diff.hunks[0];
             let added_indices: Vec<usize> = hunk
@@ -1534,7 +1534,7 @@ mod tests {
         }
         create_file_with_content(&temp_dir, "test.txt", &modified);
 
-        let diff = get_diff(&repo, "test.txt", &DiffSide::Working).unwrap();
+        let diff = get_diff(&repo, "test.txt", &DiffSide::Working, Some(3)).unwrap();
         if !diff.hunks.is_empty() {
             let hunk = &diff.hunks[0];
             if let Some((idx, _)) = hunk.lines.iter().enumerate().find(|(_, line)| line.origin == "+") {
@@ -1554,7 +1554,7 @@ mod tests {
         let modified = "line 1\nmod 2\nline 3\nmod 4\nline 5\nmod 6\n";
         create_file_with_content(&temp_dir, "test.txt", modified);
 
-        let diff = get_diff(&repo, "test.txt", &DiffSide::Working).unwrap();
+        let diff = get_diff(&repo, "test.txt", &DiffSide::Working, Some(3)).unwrap();
         if !diff.hunks.is_empty() {
             let hunk = &diff.hunks[0];
             let added_indices: Vec<usize> = hunk
@@ -1598,7 +1598,7 @@ mod tests {
         let modified = "line 1\nmod 2\nline 3\n";
         create_file_with_content(&temp_dir, "test.txt", modified);
 
-        let diff = get_diff(&repo, "test.txt", &DiffSide::Working).unwrap();
+        let diff = get_diff(&repo, "test.txt", &DiffSide::Working, Some(3)).unwrap();
         if !diff.hunks.is_empty() {
             let hunk = &diff.hunks[0];
             if let Some((idx, _)) = hunk.lines.iter().enumerate().find(|(_, line)| line.origin == "+") {
@@ -1622,7 +1622,7 @@ mod tests {
         create_file_with_content(&temp_dir, "test.txt", modified);
 
         // Stage all lines individually
-        let diff = get_diff(&repo, "test.txt", &DiffSide::Working).unwrap();
+        let diff = get_diff(&repo, "test.txt", &DiffSide::Working, Some(3)).unwrap();
         if !diff.hunks.is_empty() {
             let hunk = &diff.hunks[0];
             let all_added: Vec<usize> = hunk
@@ -1740,7 +1740,7 @@ mod tests {
 
         // Deleted files have hunks (all deletions), so staging should work
         // This is different from staging the file itself which uses stage_file()
-        let diff = get_diff(&repo, "test.txt", &DiffSide::Working).unwrap();
+        let diff = get_diff(&repo, "test.txt", &DiffSide::Working, Some(3)).unwrap();
         if !diff.hunks.is_empty() && diff.is_deleted {
             let result = stage_hunk(&repo, "test.txt", 0, false);
             // Should succeed - deleted files can have their deletion hunks staged
@@ -1764,7 +1764,7 @@ mod tests {
         let modified2 = "mod 1\nline 2\nmod 3\n";
         create_file_with_content(&temp_dir, "test.txt", modified2);
 
-        let diff = get_diff(&repo, "test.txt", &DiffSide::Working).unwrap();
+        let diff = get_diff(&repo, "test.txt", &DiffSide::Working, Some(3)).unwrap();
         if !diff.hunks.is_empty() {
             let result = stage_hunk(&repo, "test.txt", 0, false);
             assert!(result.is_ok());
@@ -1803,7 +1803,7 @@ mod tests {
         }
         create_file_with_content(&temp_dir, "test.txt", &modified);
 
-        let diff = get_diff(&repo, "test.txt", &DiffSide::Working).unwrap();
+        let diff = get_diff(&repo, "test.txt", &DiffSide::Working, Some(3)).unwrap();
 
         // Try to stage first few hunks
         for i in 0..diff.hunks.len().min(5) {
@@ -1887,7 +1887,7 @@ mod tests {
         let modified = "mod 1\nline 2\n\nline 4\nmod 5\n";
         create_file_with_content(&temp_dir, "test.txt", modified);
 
-        let diff = get_diff(&repo, "test.txt", &DiffSide::Working).unwrap();
+        let diff = get_diff(&repo, "test.txt", &DiffSide::Working, Some(3)).unwrap();
         if diff.hunks.len() >= 2 {
             // Stage only first hunk
             stage_hunk(&repo, "test.txt", 0, false).unwrap();
@@ -1934,7 +1934,7 @@ mod tests {
         let modified = "line 1\nmodified 2\nline 3\nmodified 4\nline 5\n";
         create_file_with_content(&temp_dir, "test.txt", modified);
 
-        let diff = get_diff(&repo, "test.txt", &DiffSide::Working).unwrap();
+        let diff = get_diff(&repo, "test.txt", &DiffSide::Working, Some(3)).unwrap();
         if !diff.hunks.is_empty() {
             let hunk = &diff.hunks[0];
             let patch = build_patch("test.txt", hunk, None).unwrap();
@@ -1957,7 +1957,7 @@ mod tests {
         let modified = "line 1\nline 2\nnew line 3\nnew line 4\n";
         create_file_with_content(&temp_dir, "test.txt", modified);
 
-        let diff = get_diff(&repo, "test.txt", &DiffSide::Working).unwrap();
+        let diff = get_diff(&repo, "test.txt", &DiffSide::Working, Some(3)).unwrap();
         if !diff.hunks.is_empty() {
             let hunk = &diff.hunks[0];
             let patch = build_patch("test.txt", hunk, None).unwrap();
@@ -1978,7 +1978,7 @@ mod tests {
         let modified = "line 1\nline 4\n";
         create_file_with_content(&temp_dir, "test.txt", modified);
 
-        let diff = get_diff(&repo, "test.txt", &DiffSide::Working).unwrap();
+        let diff = get_diff(&repo, "test.txt", &DiffSide::Working, Some(3)).unwrap();
         if !diff.hunks.is_empty() {
             let hunk = &diff.hunks[0];
             let patch = build_patch("test.txt", hunk, None).unwrap();
@@ -2048,7 +2048,7 @@ mod tests {
         }
         create_file_with_content(&temp_dir, "large.txt", &modified);
 
-        let diff = get_diff(&repo, "large.txt", &DiffSide::Working).unwrap();
+        let diff = get_diff(&repo, "large.txt", &DiffSide::Working, Some(3)).unwrap();
         if !diff.hunks.is_empty() {
             let result = stage_hunk(&repo, "large.txt", 0, false);
             assert!(result.is_ok());
@@ -2085,7 +2085,7 @@ mod tests {
         // File is already committed and hasn't been modified
         // get_diff should show no changes (Working tree diff shows changes between index and working directory)
 
-        let diff = get_diff(&repo, "test.txt", &DiffSide::Working).unwrap();
+        let diff = get_diff(&repo, "test.txt", &DiffSide::Working, Some(3)).unwrap();
         // For an uncommitted but unmodified file, there may still be hunks if index != HEAD
         // This test should actually check if file is identical in both index and working tree
         // If diff has hunks, they would be context-only which git normally doesn't show
@@ -2107,7 +2107,7 @@ mod tests {
         // Delete entire file content (replace with empty)
         create_file_with_content(&temp_dir, "test.txt", "");
 
-        let diff = get_diff(&repo, "test.txt", &DiffSide::Working).unwrap();
+        let diff = get_diff(&repo, "test.txt", &DiffSide::Working, Some(3)).unwrap();
         if !diff.hunks.is_empty() {
             let result = stage_hunk(&repo, "test.txt", 0, false);
             assert!(result.is_ok());
@@ -2181,7 +2181,7 @@ mod tests {
         let modified = b"line 1\x00\nline 2\n";
         std::fs::write(&file_path, modified).unwrap();
 
-        let diff = get_diff(&repo, "test.txt", &DiffSide::Working).unwrap();
+        let diff = get_diff(&repo, "test.txt", &DiffSide::Working, Some(3)).unwrap();
         // File might be treated as binary, so hunks might be empty
         if !diff.hunks.is_empty() {
             let result = stage_hunk(&repo, "test.txt", 0, false);
@@ -2199,7 +2199,7 @@ mod tests {
         let modified = "line 1\nmod 2\nmod 3\nmod 4\nline 5\n";
         create_file_with_content(&temp_dir, "test.txt", modified);
 
-        let diff = get_diff(&repo, "test.txt", &DiffSide::Working).unwrap();
+        let diff = get_diff(&repo, "test.txt", &DiffSide::Working, Some(3)).unwrap();
         if !diff.hunks.is_empty() {
             let hunk = &diff.hunks[0];
             let added_indices: Vec<usize> = hunk

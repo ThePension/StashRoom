@@ -126,6 +126,8 @@ export function ChangeList({ type }: ChangeListProps) {
   const handleStageToggle = async (entry: StatusEntry) => {
     if (!repo) return;
 
+    const currentIndex = entries.findIndex(e => e.path === entry.path);
+
     setIsOperating(true);
     try {
       const response =
@@ -134,7 +136,48 @@ export function ChangeList({ type }: ChangeListProps) {
           : await api.unstageFile(repo.repoId, entry.path);
 
       if (response.ok && response.data) {
+        // Calculate next file to select
+        let nextPath: string | null = null;
+        let nextSide: 'working' | 'index' = 'working';
+
+        if (type === 'unstaged') {
+          // When staging: select the next unstaged file (or previous if last)
+          const newUnstagedEntries = response.data.entries.filter(
+            e => e.unstagedStatus !== null || e.untracked
+          );
+
+          if (newUnstagedEntries.length > 0) {
+            const nextIndex = Math.min(currentIndex, newUnstagedEntries.length - 1);
+            nextPath = newUnstagedEntries[nextIndex].path;
+            nextSide = 'working';
+          }
+        } else {
+          // When unstaging: select the next staged file (or previous if last)
+          const newStagedEntries = response.data.entries.filter(
+            e => e.stagedStatus !== null
+          );
+
+          if (newStagedEntries.length > 0) {
+            const nextIndex = Math.min(currentIndex, newStagedEntries.length - 1);
+            nextPath = newStagedEntries[nextIndex].path;
+            nextSide = 'index';
+          }
+        }
+
+        // Clear current diff immediately to prevent showing wrong file
+        useStore.getState().clearDiff();
+
+        // Update status
         useStore.getState().updateStatus(response.data);
+
+        // Now select and load the next file
+        if (nextPath) {
+          setSelectedPath(nextPath);
+          loadDiff(repo.repoId, nextPath, nextSide);
+        } else {
+          setSelectedPath(null);
+        }
+
         toast.success(
           type === 'unstaged'
             ? `Staged ${entry.path}`

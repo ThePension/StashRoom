@@ -79,7 +79,7 @@ pub fn get_diff(request: DiffRequest, state: State<AppState>) -> ApiResponse<Fil
         Err(e) => return ApiResponse::error("REPO_NOT_FOUND".to_string(), e.to_string()),
     };
 
-    match diff::get_diff(&repo, &request.path, &request.side) {
+    match diff::get_diff(&repo, &request.path, &request.side, request.context_lines) {
         Ok(diff) => ApiResponse::success(diff),
         Err(e) => ApiResponse::error("DIFF_ERROR".to_string(), e.to_string()),
     }

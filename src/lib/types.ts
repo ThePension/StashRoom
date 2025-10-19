@@ -61,6 +61,7 @@ export interface DiffRequest {
   repoId: string;
   path: string;
   side: DiffSide;
+  contextLines?: number | null; // null or undefined means show whole file
 }
 
 export type DiffSide = "working" | "index" | "head";

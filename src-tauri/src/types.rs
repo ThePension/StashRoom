@@ -67,6 +67,12 @@ pub struct DiffRequest {
     pub repo_id: String,
     pub path: String,
     pub side: DiffSide,
+    #[serde(default = "default_context_lines")]
+    pub context_lines: Option<u32>, // None means show whole file
+}
+
+fn default_context_lines() -> Option<u32> {
+    Some(3)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
