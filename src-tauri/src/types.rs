@@ -348,6 +348,43 @@ pub struct SwitchBranchResponse {
 }
 
 // ============================================================================
+// Search Operations
+// ============================================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchFilesRequest {
+    pub repo_id: String,
+    pub query: String,
+    #[serde(default = "default_search_limit")]
+    pub limit: usize,
+}
+
+fn default_search_limit() -> usize {
+    100
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchFilesResponse {
+    pub results: Vec<FileSearchResult>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileSearchResult {
+    pub path: String,
+    pub commits: Vec<CommitFileMatch>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommitFileMatch {
+    pub commit: CommitSummary,
+    pub change: CommitFileChangeType,
+}
+
+// ============================================================================
 // Internal Cache Types
 // ============================================================================
 

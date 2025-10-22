@@ -10,6 +10,7 @@ import { KeyboardShortcutsHelp } from './components/KeyboardShortcutsHelp';
 import { HistoryPanel } from './components/HistoryPanel';
 import { BranchPanel } from './components/BranchPanel';
 import { SettingsDialog } from './components/SettingsDialog';
+import { QuickSearchModal } from './components/QuickSearchModal';
 
 function App() {
   const repo = useStore((s) => s.repo);
@@ -20,6 +21,7 @@ function App() {
   const compactMode = useStore((s) => s.settings.compactMode);
   const [showHistory, setShowHistory] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showQuickSearch, setShowQuickSearch] = useState(false);
 
   // Apply theme based on settings - runs on every theme change
   useEffect(() => {
@@ -52,12 +54,18 @@ function App() {
     }
   }, [theme]);
 
-  // Settings keyboard shortcut (Ctrl+, or Cmd+,)
+  // Global keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Settings shortcut (Ctrl+, or Cmd+,)
       if ((e.ctrlKey || e.metaKey) && e.key === ',') {
         e.preventDefault();
         setShowSettings(true);
+      }
+      // Quick Search shortcut (Ctrl+P or Cmd+P)
+      else if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
+        e.preventDefault();
+        setShowQuickSearch(true);
       }
     };
 
@@ -160,6 +168,11 @@ function App() {
       <Toaster position="bottom-right" />
       <KeyboardShortcutsHelp />
       <SettingsDialog isOpen={showSettings} onClose={() => setShowSettings(false)} />
+      <QuickSearchModal
+        isOpen={showQuickSearch}
+        onClose={() => setShowQuickSearch(false)}
+        onNavigateToHistory={() => setShowHistory(true)}
+      />
 
       {/* Progress Bar */}
       {(isLoading || isOperating) && (

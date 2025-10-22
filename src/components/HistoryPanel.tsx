@@ -27,6 +27,39 @@ export function HistoryPanel() {
     }
   }, [repo, loadHistory]);
 
+  // Scroll to selected commit when it changes
+  useEffect(() => {
+    if (!selectedCommit || !virtuosoRef.current || commits.length === 0) {
+      return;
+    }
+
+    const scrollToCommit = async () => {
+      let index = commits.findIndex((c) => c.oid === selectedCommit.oid);
+
+      // If commit not found and there are more commits to load, keep loading
+      while (index === -1 && hasMore && !isLoading && repo) {
+        await loadMore(repo.repoId);
+        // After loading, check again
+        const updatedCommits = useStore.getState().commits;
+        index = updatedCommits.findIndex((c) => c.oid === selectedCommit.oid);
+      }
+
+      // Now scroll if we found the commit
+      if (index !== -1 && virtuosoRef.current) {
+        // Use setTimeout to ensure the DOM has updated
+        setTimeout(() => {
+          virtuosoRef.current?.scrollToIndex({
+            index,
+            align: 'center',
+            behavior: 'smooth',
+          });
+        }, 100);
+      }
+    };
+
+    scrollToCommit();
+  }, [selectedCommit?.oid]); // Only depend on oid to avoid infinite loops
+
   const handleSelectCommit = (commit: CommitSummary) => {
     if (!repo) return;
     selectCommit(repo.repoId, commit);

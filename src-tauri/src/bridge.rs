@@ -521,6 +521,52 @@ pub async fn get_commit_diff(
     Ok(result)
 }
 
+#[tauri::command]
+pub async fn search_files(
+    request: SearchFilesRequest,
+    state: State<'_, AppState>,
+) -> Result<ApiResponse<SearchFilesResponse>, String> {
+    let repo_id = request.repo_id.clone();
+    let query = request.query.clone();
+    let limit = request.limit;
+
+    // Get the repository path
+    let repo_path = {
+        let repo = match state.repo_registry.get_repo(&repo_id) {
+            Ok(r) => r,
+            Err(e) => return Ok(ApiResponse::error("REPO_NOT_FOUND".to_string(), e.to_string())),
+        };
+
+        match repo.path().parent() {
+            Some(p) => p.to_path_buf(),
+            None => {
+                return Ok(ApiResponse::error(
+                    "INVALID_REPO_PATH".to_string(),
+                    "Repository has no parent path".to_string(),
+                ))
+            }
+        }
+    };
+
+    // Run the blocking git operation on a dedicated thread pool
+    let result = tokio::task::spawn_blocking(move || {
+        // Reopen the repository in this thread
+        let repo = match git2::Repository::open(&repo_path) {
+            Ok(r) => r,
+            Err(e) => return ApiResponse::error("REPO_OPEN_ERROR".to_string(), e.to_string()),
+        };
+
+        match history::search_files(&repo, &query, limit) {
+            Ok(response) => ApiResponse::success(response),
+            Err(e) => ApiResponse::error("SEARCH_FILES_ERROR".to_string(), e.to_string()),
+        }
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?;
+
+    Ok(result)
+}
+
 // ============================================================================
 // Backup Commands (bonus utilities)
 // ============================================================================

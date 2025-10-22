@@ -233,3 +233,27 @@ export interface SwitchBranchRequest {
 export interface SwitchBranchResponse {
   name: string;
 }
+
+// ============================================================================
+// Search Operations
+// ============================================================================
+
+export interface SearchFilesRequest {
+  repoId: string;
+  query: string;
+  limit?: number;
+}
+
+export interface SearchFilesResponse {
+  results: FileSearchResult[];
+}
+
+export interface FileSearchResult {
+  path: string;
+  commits: CommitFileMatch[];
+}
+
+export interface CommitFileMatch {
+  commit: CommitSummary;
+  change: CommitFileChangeType;
+}

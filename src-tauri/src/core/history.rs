@@ -4,7 +4,8 @@ use std::collections::HashMap;
 
 use crate::types::{
     CommitAuthor, CommitDiffHunk, CommitDiffLine, CommitFileDiff, CommitFileChangeType,
-    CommitSummary, GetCommitDiffResponse, GetLogResponse,
+    CommitFileMatch, CommitSummary, FileSearchResult, GetCommitDiffResponse, GetLogResponse,
+    SearchFilesResponse,
 };
 
 /// Get commit log for the current branch
@@ -337,4 +338,144 @@ fn collect_hunks_for_file(diff: &Diff, file_path: &str) -> Result<Vec<CommitDiff
         .into_inner();
 
     Ok(result)
+}
+
+/// Search for files across commit history
+pub fn search_files(repo: &Repository, query: &str, result_limit: usize) -> Result<SearchFilesResponse> {
+    if query.trim().is_empty() {
+        return Ok(SearchFilesResponse {
+            results: Vec::new(),
+        });
+    }
+
+    let query_lower = query.to_lowercase();
+    let mut revwalk = repo.revwalk().context("Failed to create revwalk")?;
+
+    // Start from HEAD
+    let head = repo.head().context("Failed to get HEAD")?;
+    revwalk
+        .push(head.target().context("HEAD has no target")?)
+        .context("Failed to push HEAD to revwalk")?;
+
+    revwalk.set_sorting(git2::Sort::TOPOLOGICAL | git2::Sort::TIME)?;
+
+    // Get references for building commit summaries
+    let refs_map = get_refs_map(repo)?;
+
+    // Map: file path -> list of (commit, change type)
+    let mut file_map: HashMap<String, Vec<CommitFileMatch>> = HashMap::new();
+    let mut commit_count = 0;
+    let commit_limit = 200; // Search through up to 200 commits
+
+    for oid_result in revwalk {
+        if commit_count >= commit_limit {
+            break;
+        }
+
+        let oid = oid_result?;
+        let commit = repo.find_commit(oid)?;
+
+        // Get parent tree or None for root commits
+        let parent_tree = if commit.parent_count() > 0 {
+            Some(commit.parent(0)?.tree()?)
+        } else {
+            None
+        };
+
+        let commit_tree = commit.tree()?;
+
+        // Create diff options
+        let mut diff_opts = DiffOptions::new();
+        diff_opts.ignore_whitespace(false);
+
+        // Create diff
+        let diff = if let Some(parent_tree) = parent_tree {
+            repo.diff_tree_to_tree(Some(&parent_tree), Some(&commit_tree), Some(&mut diff_opts))?
+        } else {
+            repo.diff_tree_to_tree(None, Some(&commit_tree), Some(&mut diff_opts))?
+        };
+
+        // Enable rename detection
+        let mut find_opts = git2::DiffFindOptions::new();
+        find_opts.renames(true);
+        let mut diff = diff;
+        diff.find_similar(Some(&mut find_opts))?;
+
+        // Check each file in the diff
+        diff.foreach(
+            &mut |delta, _progress| {
+                let path = delta
+                    .new_file()
+                    .path()
+                    .unwrap_or_else(|| std::path::Path::new(""))
+                    .to_string_lossy()
+                    .to_string();
+
+                // Simple fuzzy match: check if query chars appear in order in the path
+                if fuzzy_match(&query_lower, &path.to_lowercase()) {
+                    let change = match delta.status() {
+                        git2::Delta::Added => CommitFileChangeType::Added,
+                        git2::Delta::Deleted => CommitFileChangeType::Deleted,
+                        git2::Delta::Modified => CommitFileChangeType::Modified,
+                        git2::Delta::Renamed => CommitFileChangeType::Renamed,
+                        git2::Delta::Copied => CommitFileChangeType::Copied,
+                        _ => CommitFileChangeType::Modified,
+                    };
+
+                    // Build commit summary
+                    if let Ok(commit_summary) = build_commit_summary(&commit, &refs_map) {
+                        file_map
+                            .entry(path.clone())
+                            .or_insert_with(Vec::new)
+                            .push(CommitFileMatch {
+                                commit: commit_summary,
+                                change,
+                            });
+                    }
+                }
+
+                true
+            },
+            None,
+            None,
+            None,
+        )?;
+
+        commit_count += 1;
+    }
+
+    // Convert map to results and limit to result_limit files
+    let mut results: Vec<FileSearchResult> = file_map
+        .into_iter()
+        .map(|(path, commits)| FileSearchResult { path, commits })
+        .collect();
+
+    // Sort by number of commits (files changed more frequently first)
+    results.sort_by(|a, b| b.commits.len().cmp(&a.commits.len()));
+
+    // Limit results
+    results.truncate(result_limit);
+
+    Ok(SearchFilesResponse { results })
+}
+
+/// Simple fuzzy matching - checks if pattern chars appear in order in the string
+fn fuzzy_match(pattern: &str, text: &str) -> bool {
+    // First check if it's a substring (faster and more intuitive)
+    if text.contains(pattern) {
+        return true;
+    }
+
+    // Then do fuzzy matching
+    let mut pattern_idx = 0;
+    let pattern_chars: Vec<char> = pattern.chars().collect();
+    let text_chars: Vec<char> = text.chars().collect();
+
+    for &ch in &text_chars {
+        if pattern_idx < pattern_chars.len() && ch == pattern_chars[pattern_idx] {
+            pattern_idx += 1;
+        }
+    }
+
+    pattern_idx == pattern_chars.len()
 }

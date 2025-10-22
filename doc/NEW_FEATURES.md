@@ -2,6 +2,12 @@
 
 * Handling multiple projects
 * **Diff Search:** Find text within diff
+
+* Search file in commit history :
+    * Improve the fuzzy matching algorithm
+    * Add lazy loading when user scrolls
+    * Expend search also in the current staging context
+
 * **Syntax Highlighting:** Monaco with language detection
 * Improve branching management
 * Feature to display the whole file, and not only hunks (or maybe a param to define the number or lines around the hunks)

@@ -31,6 +31,7 @@ pub fn run() {
             bridge::switch_branch,
             bridge::get_log,
             bridge::get_commit_diff,
+            bridge::search_files,
             bridge::list_backups,
             bridge::restore_from_backup,
         ])

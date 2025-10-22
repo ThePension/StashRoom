@@ -21,6 +21,8 @@ import type {
   ListBranchesResponse,
   SwitchBranchRequest,
   SwitchBranchResponse,
+  SearchFilesRequest,
+  SearchFilesResponse,
 } from './types';
 
 class GitAPI {
@@ -179,6 +181,13 @@ class GitAPI {
    */
   async switchBranch(request: SwitchBranchRequest): Promise<ApiResponse<SwitchBranchResponse>> {
     return invoke<ApiResponse<SwitchBranchResponse>>('switch_branch', { request });
+  }
+
+  /**
+   * Searches for files across commit history
+   */
+  async searchFiles(request: SearchFilesRequest): Promise<ApiResponse<SearchFilesResponse>> {
+    return invoke<ApiResponse<SearchFilesResponse>>('search_files', { request });
   }
 }
 
