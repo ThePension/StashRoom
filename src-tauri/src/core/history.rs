@@ -362,8 +362,8 @@ pub fn search_files(repo: &Repository, query: &str, result_limit: usize) -> Resu
     // Get references for building commit summaries
     let refs_map = get_refs_map(repo)?;
 
-    // Map: file path -> list of (commit, change type)
-    let mut file_map: HashMap<String, Vec<CommitFileMatch>> = HashMap::new();
+    // Map: file path -> (list of commits, best score for this file)
+    let mut file_map: HashMap<String, (Vec<CommitFileMatch>, i32)> = HashMap::new();
     let mut commit_count = 0;
     let commit_limit = 200; // Search through up to 200 commits
 
@@ -411,8 +411,15 @@ pub fn search_files(repo: &Repository, query: &str, result_limit: usize) -> Resu
                     .to_string_lossy()
                     .to_string();
 
-                // Simple fuzzy match: check if query chars appear in order in the path
-                if fuzzy_match(&query_lower, &path.to_lowercase()) {
+                // Extract filename from path for matching
+                let filename = path.rsplit('/').next()
+                    .or_else(|| path.rsplit('\\').next())
+                    .unwrap_or(&path);
+
+                // Fuzzy match with scoring (only against filename)
+                let (matches, score) = fuzzy_match_with_score(&query_lower, &filename.to_lowercase());
+
+                if matches {
                     let change = match delta.status() {
                         git2::Delta::Added => CommitFileChangeType::Added,
                         git2::Delta::Deleted => CommitFileChangeType::Deleted,
@@ -424,13 +431,17 @@ pub fn search_files(repo: &Repository, query: &str, result_limit: usize) -> Resu
 
                     // Build commit summary
                     if let Ok(commit_summary) = build_commit_summary(&commit, &refs_map) {
-                        file_map
+                        let entry = file_map
                             .entry(path.clone())
-                            .or_insert_with(Vec::new)
-                            .push(CommitFileMatch {
-                                commit: commit_summary,
-                                change,
-                            });
+                            .or_insert_with(|| (Vec::new(), 0));
+
+                        entry.0.push(CommitFileMatch {
+                            commit: commit_summary,
+                            change,
+                        });
+
+                        // Keep track of the best score for this file
+                        entry.1 = entry.1.max(score);
                     }
                 }
 
@@ -444,38 +455,437 @@ pub fn search_files(repo: &Repository, query: &str, result_limit: usize) -> Resu
         commit_count += 1;
     }
 
-    // Convert map to results and limit to result_limit files
-    let mut results: Vec<FileSearchResult> = file_map
+    // Convert map to results
+    let mut results: Vec<(FileSearchResult, i32)> = file_map
         .into_iter()
-        .map(|(path, commits)| FileSearchResult { path, commits })
+        .map(|(path, (commits, score))| {
+            (FileSearchResult { path, commits }, score)
+        })
         .collect();
 
-    // Sort by number of commits (files changed more frequently first)
-    results.sort_by(|a, b| b.commits.len().cmp(&a.commits.len()));
+    // Sort by score (descending), then by number of commits (descending)
+    results.sort_by(|a, b| {
+        b.1.cmp(&a.1) // Primary: sort by score
+            .then_with(|| b.0.commits.len().cmp(&a.0.commits.len())) // Secondary: by commit count
+    });
 
-    // Limit results
-    results.truncate(result_limit);
+    // Remove scores and limit results
+    let results: Vec<FileSearchResult> = results
+        .into_iter()
+        .take(result_limit)
+        .map(|(result, _)| result)
+        .collect();
 
     Ok(SearchFilesResponse { results })
 }
 
-/// Simple fuzzy matching - checks if pattern chars appear in order in the string
-fn fuzzy_match(pattern: &str, text: &str) -> bool {
-    // First check if it's a substring (faster and more intuitive)
-    if text.contains(pattern) {
-        return true;
-    }
-
-    // Then do fuzzy matching
-    let mut pattern_idx = 0;
+/// Advanced fuzzy matching with scoring
+/// Returns (matches: bool, score: i32) where higher scores indicate better matches
+fn fuzzy_match_with_score(pattern: &str, text: &str) -> (bool, i32) {
     let pattern_chars: Vec<char> = pattern.chars().collect();
     let text_chars: Vec<char> = text.chars().collect();
 
-    for &ch in &text_chars {
-        if pattern_idx < pattern_chars.len() && ch == pattern_chars[pattern_idx] {
+    if pattern_chars.is_empty() {
+        return (true, 0);
+    }
+
+    if text_chars.is_empty() {
+        return (false, 0);
+    }
+
+    // Check if all pattern characters exist in text (case-insensitive)
+    let mut pattern_idx = 0;
+    for &text_ch in &text_chars {
+        if pattern_idx < pattern_chars.len() {
+            let pattern_ch_lower = pattern_chars[pattern_idx].to_lowercase().next().unwrap_or(pattern_chars[pattern_idx]);
+            let text_ch_lower = text_ch.to_lowercase().next().unwrap_or(text_ch);
+            if text_ch_lower == pattern_ch_lower {
+                pattern_idx += 1;
+            }
+        }
+    }
+
+    if pattern_idx != pattern_chars.len() {
+        return (false, 0); // Not all pattern chars found
+    }
+
+    // Calculate score
+    let score = calculate_match_score(&pattern_chars, &text_chars);
+    (true, score)
+}
+
+/// Calculate match score with various bonuses and penalties
+fn calculate_match_score(pattern_chars: &[char], text_chars: &[char]) -> i32 {
+    let mut score = 0;
+    let mut pattern_idx = 0;
+    let mut consecutive_matches = 0;
+    let mut prev_match_idx: Option<usize> = None;
+
+    for (text_idx, &text_ch) in text_chars.iter().enumerate() {
+        if pattern_idx < pattern_chars.len() {
+            let pattern_ch_lower = pattern_chars[pattern_idx].to_lowercase().next().unwrap_or(pattern_chars[pattern_idx]);
+            let text_ch_lower = text_ch.to_lowercase().next().unwrap_or(text_ch);
+
+            if text_ch_lower != pattern_ch_lower {
+                continue;
+            }
+            // Base score for match
+            score += 10;
+
+            // Bonus #1: Start of string (very important)
+            if text_idx == 0 {
+                score += 50;
+            }
+
+            // Bonus #2: Word boundary detection
+            if is_word_boundary(text_chars, text_idx) {
+                score += 30;
+            }
+
+            // Bonus #3: Consecutive character bonus
+            if let Some(prev_idx) = prev_match_idx {
+                if text_idx == prev_idx + 1 {
+                    consecutive_matches += 1;
+                    score += 15 * consecutive_matches; // Increasing bonus for longer runs
+                } else {
+                    consecutive_matches = 0;
+                }
+            }
+
+            // Bonus #4: Position-based scoring (earlier is better)
+            let position_bonus = (100 - text_idx as i32).max(0);
+            score += position_bonus / 10;
+
+            // Penalty #5: Gap penalty
+            if let Some(prev_idx) = prev_match_idx {
+                let gap = text_idx - prev_idx - 1;
+                if gap > 0 {
+                    score -= (gap as i32) * 3; // Penalize gaps between matches
+                }
+            }
+
+            // Bonus: Case match
+            if pattern_chars[pattern_idx] == text_ch {
+                score += 5; // Exact case match bonus
+            }
+
+            prev_match_idx = Some(text_idx);
             pattern_idx += 1;
         }
     }
 
-    pattern_idx == pattern_chars.len()
+    score
 }
+
+/// Check if a position in text is at a word boundary
+fn is_word_boundary(text_chars: &[char], idx: usize) -> bool {
+    if idx == 0 {
+        return true;
+    }
+
+    let prev_char = text_chars[idx - 1];
+    let curr_char = text_chars[idx];
+
+    // Path separators
+    if prev_char == '/' || prev_char == '\\' || prev_char == '.' {
+        return true;
+    }
+
+    // CamelCase/PascalCase boundary (lowercase to uppercase)
+    if prev_char.is_lowercase() && curr_char.is_uppercase() {
+        return true;
+    }
+
+    // Underscore or hyphen boundaries
+    if prev_char == '_' || prev_char == '-' {
+        return true;
+    }
+
+    // Digit to letter boundary
+    if prev_char.is_numeric() && curr_char.is_alphabetic() {
+        return true;
+    }
+
+    false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_fuzzy_match_exact() {
+        let (matches, score) = fuzzy_match_with_score("app", "app");
+        assert!(matches);
+        assert!(score > 100); // Should have high score for exact match
+    }
+
+    #[test]
+    fn test_fuzzy_match_case_insensitive() {
+        let (matches, _) = fuzzy_match_with_score("app", "APP");
+        assert!(matches);
+
+        let (matches2, _) = fuzzy_match_with_score("APP", "app");
+        assert!(matches2);
+    }
+
+    #[test]
+    fn test_fuzzy_match_substring() {
+        let (matches, score) = fuzzy_match_with_score("app", "application.tsx");
+        assert!(matches);
+        assert!(score > 0);
+    }
+
+    #[test]
+    fn test_fuzzy_match_scattered() {
+        let (matches, score) = fuzzy_match_with_score("apc", "application_config.rs");
+        assert!(matches);
+        assert!(score > 0);
+    }
+
+    #[test]
+    fn test_fuzzy_match_no_match() {
+        let (matches, score) = fuzzy_match_with_score("xyz", "application.tsx");
+        assert!(!matches);
+        assert_eq!(score, 0);
+    }
+
+    #[test]
+    fn test_fuzzy_match_empty_pattern() {
+        let (matches, score) = fuzzy_match_with_score("", "app.tsx");
+        assert!(matches);
+        assert_eq!(score, 0);
+    }
+
+    #[test]
+    fn test_fuzzy_match_empty_text() {
+        let (matches, score) = fuzzy_match_with_score("app", "");
+        assert!(!matches);
+        assert_eq!(score, 0);
+    }
+
+    #[test]
+    fn test_fuzzy_match_both_empty() {
+        let (matches, score) = fuzzy_match_with_score("", "");
+        assert!(matches);
+        assert_eq!(score, 0);
+    }
+
+    #[test]
+    fn test_consecutive_bonus() {
+        let (matches1, score1) = fuzzy_match_with_score("abc", "abcdef.tsx");
+        let (matches2, score2) = fuzzy_match_with_score("abc", "axbxcxdef.tsx");
+
+        assert!(matches1 && matches2);
+        // Consecutive characters should score higher than scattered (with 'x' gaps)
+        assert!(score1 > score2, "Consecutive matches should score higher than scattered. score1={}, score2={}", score1, score2);
+    }
+
+    #[test]
+    fn test_start_of_string_bonus() {
+        let (_, score_start) = fuzzy_match_with_score("app", "app.tsx");
+        let (_, score_middle) = fuzzy_match_with_score("app", "myapp.tsx");
+
+        // Same pattern, but starting at position 0 vs position 2
+        assert!(score_start > score_middle, "Matches at start should score higher. score_start={}, score_middle={}", score_start, score_middle);
+    }
+
+    #[test]
+    fn test_word_boundary_bonus() {
+        let (_, score_boundary) = fuzzy_match_with_score("bar", "FooBar.tsx");
+        let (_, score_middle) = fuzzy_match_with_score("oba", "FooBar.tsx");
+
+        assert!(score_boundary > score_middle, "Word boundary matches should score higher");
+    }
+
+    #[test]
+    fn test_gap_penalty() {
+        let (_, score_small_gap) = fuzzy_match_with_score("abc", "abc.tsx");
+        let (_, score_large_gap) = fuzzy_match_with_score("abc", "a___b___c.tsx");
+
+        assert!(score_small_gap > score_large_gap, "Smaller gaps should score higher");
+    }
+
+    #[test]
+    fn test_camel_case_matching() {
+        let (matches, score) = fuzzy_match_with_score("uc", "UserController.tsx");
+        assert!(matches);
+        assert!(score > 100, "CamelCase word boundaries should get bonus");
+    }
+
+    #[test]
+    fn test_position_based_scoring() {
+        let (_, score_early) = fuzzy_match_with_score("a", "app.tsx");
+        let (_, score_late) = fuzzy_match_with_score("x", "app.tsx");
+
+        assert!(score_early > score_late, "Earlier positions should score higher");
+    }
+
+    #[test]
+    fn test_special_characters() {
+        let (matches, _) = fuzzy_match_with_score("app", "app-config.tsx");
+        assert!(matches);
+
+        let (matches2, _) = fuzzy_match_with_score("app", "app_config.tsx");
+        assert!(matches2);
+
+        let (matches3, _) = fuzzy_match_with_score("app", "app.config.tsx");
+        assert!(matches3);
+    }
+
+    #[test]
+    fn test_unicode_characters() {
+        // Note: Unicode normalization makes "ë" different from "e", so this might not match
+        // This test verifies the algorithm doesn't crash with unicode
+        let (matches, _) = fuzzy_match_with_score("tst", "tëst.tsx");
+        assert!(matches); // Should match 't', 's', 't' ignoring 'ë'
+
+        let (matches2, _) = fuzzy_match_with_score("app", "应用程序app.tsx");
+        assert!(matches2); // Should match "app" at the end
+    }
+
+    #[test]
+    fn test_very_long_strings() {
+        let long_text = "a".repeat(1000) + "bc";
+        let (matches, _) = fuzzy_match_with_score("abc", &long_text);
+        assert!(matches);
+    }
+
+    #[test]
+    fn test_pattern_longer_than_text() {
+        let (matches, score) = fuzzy_match_with_score("application", "app");
+        assert!(!matches);
+        assert_eq!(score, 0);
+    }
+
+    #[test]
+    fn test_repeated_characters() {
+        let (matches, _) = fuzzy_match_with_score("aaa", "aaa.tsx");
+        assert!(matches);
+
+        let (matches2, _) = fuzzy_match_with_score("aa", "banana.tsx");
+        assert!(matches2);
+    }
+
+    #[test]
+    fn test_numbers_in_filename() {
+        let (matches, _) = fuzzy_match_with_score("v2", "appV2Controller.tsx");
+        assert!(matches);
+
+        let (matches2, _) = fuzzy_match_with_score("123", "test123.tsx");
+        assert!(matches2);
+    }
+
+    #[test]
+    fn test_is_word_boundary_slash() {
+        let chars: Vec<char> = "src/app".chars().collect();
+        assert!(is_word_boundary(&chars, 4)); // 'a' after '/'
+    }
+
+    #[test]
+    fn test_is_word_boundary_backslash() {
+        let chars: Vec<char> = "src\\app".chars().collect();
+        assert!(is_word_boundary(&chars, 4)); // 'a' after '\\'
+    }
+
+    #[test]
+    fn test_is_word_boundary_dot() {
+        let chars: Vec<char> = "app.tsx".chars().collect();
+        assert!(is_word_boundary(&chars, 4)); // 't' after '.'
+    }
+
+    #[test]
+    fn test_is_word_boundary_camel_case() {
+        let chars: Vec<char> = "appController".chars().collect();
+        assert!(is_word_boundary(&chars, 3)); // 'C' after 'p'
+    }
+
+    #[test]
+    fn test_is_word_boundary_underscore() {
+        let chars: Vec<char> = "app_config".chars().collect();
+        assert!(is_word_boundary(&chars, 4)); // 'c' after '_'
+    }
+
+    #[test]
+    fn test_is_word_boundary_hyphen() {
+        let chars: Vec<char> = "app-config".chars().collect();
+        assert!(is_word_boundary(&chars, 4)); // 'c' after '-'
+    }
+
+    #[test]
+    fn test_is_word_boundary_digit_to_letter() {
+        let chars: Vec<char> = "test123abc".chars().collect();
+        assert!(is_word_boundary(&chars, 7)); // 'a' after '3'
+    }
+
+    #[test]
+    fn test_is_word_boundary_start() {
+        let chars: Vec<char> = "app".chars().collect();
+        assert!(is_word_boundary(&chars, 0)); // First character
+    }
+
+    #[test]
+    fn test_is_word_boundary_lowercase_to_lowercase() {
+        let chars: Vec<char> = "application".chars().collect();
+        assert!(!is_word_boundary(&chars, 3)); // 'l' after 'p'
+    }
+
+    #[test]
+    fn test_scoring_comparison_real_world() {
+        // Test realistic scenarios
+        let files = vec![
+            "App.tsx",
+            "AppBar.tsx",
+            "application.ts",
+            "NavigationApp.tsx",
+            "helpers/app_utils.ts",
+        ];
+
+        let mut results: Vec<(&str, i32)> = files
+            .iter()
+            .map(|f| {
+                let (matches, score) = fuzzy_match_with_score("app", &f.to_lowercase());
+                (*f, if matches { score } else { 0 })
+            })
+            .collect();
+
+        results.sort_by(|a, b| b.1.cmp(&a.1));
+
+        // App.tsx should rank highest (exact match at start)
+        assert_eq!(results[0].0, "App.tsx");
+
+        // application.ts should rank high (consecutive at start)
+        assert!(results.iter().position(|r| r.0 == "application.ts").unwrap() < 3);
+    }
+
+    #[test]
+    fn test_edge_case_single_character() {
+        let (matches, _) = fuzzy_match_with_score("a", "a");
+        assert!(matches);
+
+        let (matches2, _) = fuzzy_match_with_score("a", "b");
+        assert!(!matches2);
+    }
+
+    #[test]
+    fn test_edge_case_all_same_character() {
+        let (matches, _) = fuzzy_match_with_score("aaa", "aaaaaaa");
+        assert!(matches);
+    }
+
+    #[test]
+    fn test_edge_case_reverse_order() {
+        let (matches, _) = fuzzy_match_with_score("cba", "abc");
+        assert!(!matches); // Pattern chars must appear in order
+    }
+
+    #[test]
+    fn test_whitespace_handling() {
+        let (matches, _) = fuzzy_match_with_score("a b", "a b.tsx");
+        assert!(matches);
+
+        let (matches2, _) = fuzzy_match_with_score("ab", "a b.tsx");
+        assert!(matches2); // Can skip whitespace
+    }
+}
+
