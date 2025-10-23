@@ -250,6 +250,21 @@ export function QuickSearchModal({ isOpen, onClose, onNavigateToHistory }: Quick
                               item.commitIndex === commitIdx
                           );
 
+                          // Format commit time
+                          const commitDate = new Date(commitMatch.commit.time * 1000);
+                          const now = new Date();
+                          const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                          const commitDay = new Date(commitDate.getFullYear(), commitDate.getMonth(), commitDate.getDate());
+
+                          let timeDisplay = '';
+                          if (commitDay.getTime() === today.getTime()) {
+                            timeDisplay = `Today ${commitDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}`;
+                          } else if (commitDay.getTime() === today.getTime() - 86400000) {
+                            timeDisplay = `Yesterday ${commitDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}`;
+                          } else {
+                            timeDisplay = commitDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: commitDate.getFullYear() !== now.getFullYear() ? 'numeric' : undefined });
+                          }
+
                           return (
                             <div
                               key={commitMatch.commit.oid}
@@ -261,6 +276,9 @@ export function QuickSearchModal({ isOpen, onClose, onNavigateToHistory }: Quick
                               onClick={() => handleSelection(commitItemIndex)}
                             >
                               <GitCommit className="w-3 h-3 text-gray-400 flex-shrink-0" />
+                              <span className="text-xs text-gray-500 dark:text-gray-400 flex-shrink-0 w-24">
+                                {timeDisplay}
+                              </span>
                               <span className="font-mono text-xs text-gray-500 flex-shrink-0">
                                 {commitMatch.commit.shortOid}
                               </span>
