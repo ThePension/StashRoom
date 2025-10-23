@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { X, FolderOpen, RotateCcw, Trash2 } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { X, FolderOpen, RotateCcw, Trash2, Clock, FileText, ExternalLink } from 'lucide-react';
 import { api } from '../lib/api';
 import { toast } from 'sonner';
 import { useStore } from '../state/store';
@@ -10,14 +10,33 @@ interface BackupsModalProps {
   onClose: () => void;
 }
 
+type ViewMode = 'by-time' | 'by-file';
+
+interface FileVersion {
+  timestamp: string;
+  path: string;
+}
+
+interface FileGroup {
+  path: string;
+  versions: string[]; // timestamps where this file appears
+}
+
 export function BackupsModal({ isOpen, onClose }: BackupsModalProps) {
   const getActiveRepo = useStore((s) => s.getActiveRepo);
   const repo = getActiveRepo();
 
+  const [viewMode, setViewMode] = useState<ViewMode>('by-time');
   const [backups, setBackups] = useState<string[]>([]);
   const [selectedBackup, setSelectedBackup] = useState<string | null>(null);
   const [files, setFiles] = useState<string[]>([]);
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
+
+  // By File view state
+  const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
+  const [selectedVersion, setSelectedVersion] = useState<string | null>(null);
+  const [allBackupFiles, setAllBackupFiles] = useState<Map<string, string[]>>(new Map()); // timestamp -> files[]
+
   const [isLoading, setIsLoading] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
   const { confirm, ConfirmDialog } = useConfirm();
@@ -48,6 +67,9 @@ export function BackupsModal({ isOpen, onClose }: BackupsModalProps) {
         if (response.data.length > 0) {
           setSelectedBackup(response.data[0]);
         }
+
+        // Load all files for all backups (for By File view)
+        await loadAllBackupFiles(response.data);
       } else {
         toast.error('Failed to load backups');
       }
@@ -56,6 +78,25 @@ export function BackupsModal({ isOpen, onClose }: BackupsModalProps) {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const loadAllBackupFiles = async (backupIds: string[]) => {
+    if (!repo) return;
+
+    const filesMap = new Map<string, string[]>();
+
+    for (const backupId of backupIds) {
+      try {
+        const response = await api.listBackupFiles(repo.repoId, backupId);
+        if (response.ok && response.data) {
+          filesMap.set(backupId, response.data);
+        }
+      } catch (error) {
+        console.error(`Failed to load files for backup ${backupId}`, error);
+      }
+    }
+
+    setAllBackupFiles(filesMap);
   };
 
   const loadFiles = async (backupId: string) => {
@@ -77,6 +118,27 @@ export function BackupsModal({ isOpen, onClose }: BackupsModalProps) {
     }
   };
 
+  // Group files by path for "By File" view
+  const fileGroups = useMemo<FileGroup[]>(() => {
+    const groups = new Map<string, string[]>();
+
+    allBackupFiles.forEach((files, timestamp) => {
+      files.forEach((file) => {
+        if (!groups.has(file)) {
+          groups.set(file, []);
+        }
+        groups.get(file)!.push(timestamp);
+      });
+    });
+
+    return Array.from(groups.entries())
+      .map(([path, versions]) => ({
+        path,
+        versions: versions.sort().reverse(), // newest first
+      }))
+      .sort((a, b) => a.path.localeCompare(b.path));
+  }, [allBackupFiles]);
+
   const handleSelectAll = () => {
     if (selectedFiles.size === files.length) {
       setSelectedFiles(new Set());
@@ -96,27 +158,66 @@ export function BackupsModal({ isOpen, onClose }: BackupsModalProps) {
   };
 
   const handleRestoreSelected = async () => {
-    if (!repo || !selectedBackup || selectedFiles.size === 0) return;
+    if (!repo) return;
 
-    setIsRestoring(true);
-    try {
-      const pathsToRestore = Array.from(selectedFiles);
-      const response = await api.restoreMany(repo.repoId, selectedBackup, pathsToRestore);
+    if (viewMode === 'by-time') {
+      if (!selectedBackup || selectedFiles.size === 0) return;
 
-      if (response.ok && response.data) {
-        useStore.getState().updateStatus(response.data);
-        await useStore.getState().refreshStatus(repo.repoId, true);
+      setIsRestoring(true);
+      try {
+        const pathsToRestore = Array.from(selectedFiles);
+        const response = await api.restoreMany(repo.repoId, selectedBackup, pathsToRestore);
 
-        const timestamp = formatTimestamp(selectedBackup);
-        toast.success(`Restored ${pathsToRestore.length} file(s) from ${timestamp}`);
-        onClose();
-      } else {
-        toast.error(response.message || 'Failed to restore files');
+        if (response.ok && response.data) {
+          useStore.getState().updateStatus(response.data);
+          await useStore.getState().refreshStatus(repo.repoId, true);
+
+          const timestamp = formatTimestamp(selectedBackup);
+          toast.success(
+            `Restored ${pathsToRestore.length} file(s) from ${timestamp}`,
+            {
+              description: 'Files with uncommitted changes were restored as .restore files to avoid data loss.',
+              duration: 5000,
+            }
+          );
+          onClose();
+        } else {
+          toast.error(response.message || 'Failed to restore files');
+        }
+      } catch (error) {
+        toast.error('Failed to restore files');
+      } finally {
+        setIsRestoring(false);
       }
-    } catch (error) {
-      toast.error('Failed to restore files');
-    } finally {
-      setIsRestoring(false);
+    } else {
+      // By File view: restore selected version of the selected file
+      if (!selectedFilePath || !selectedVersion) return;
+
+      setIsRestoring(true);
+      try {
+        const response = await api.restoreMany(repo.repoId, selectedVersion, [selectedFilePath]);
+
+        if (response.ok && response.data) {
+          useStore.getState().updateStatus(response.data);
+          await useStore.getState().refreshStatus(repo.repoId, true);
+
+          const timestamp = formatTimestamp(selectedVersion);
+          toast.success(
+            `Restored ${selectedFilePath} from ${timestamp}`,
+            {
+              description: 'If the file had uncommitted changes, it was restored as .restore to avoid data loss.',
+              duration: 5000,
+            }
+          );
+          onClose();
+        } else {
+          toast.error(response.message || 'Failed to restore file');
+        }
+      } catch (error) {
+        toast.error('Failed to restore file');
+      } finally {
+        setIsRestoring(false);
+      }
     }
   };
 
@@ -132,7 +233,13 @@ export function BackupsModal({ isOpen, onClose }: BackupsModalProps) {
         await useStore.getState().refreshStatus(repo.repoId, true);
 
         const timestamp = formatTimestamp(selectedBackup);
-        toast.success(`Restored ${files.length} file(s) from ${timestamp}`);
+        toast.success(
+          `Restored ${files.length} file(s) from ${timestamp}`,
+          {
+            description: 'Files with uncommitted changes were restored as .restore files to avoid data loss.',
+            duration: 5000,
+          }
+        );
         onClose();
       } else {
         toast.error(response.message || 'Failed to restore files');
@@ -144,8 +251,10 @@ export function BackupsModal({ isOpen, onClose }: BackupsModalProps) {
     }
   };
 
-  const handleRevealFile = async (file: string) => {
-    if (!repo || !selectedBackup) return;
+  const handleRevealFile = async (file: string, timestamp?: string) => {
+    if (!repo) return;
+    const backupId = timestamp || selectedBackup;
+    if (!backupId) return;
 
     try {
       const { Command } = await import('@tauri-apps/plugin-shell');
@@ -153,7 +262,7 @@ export function BackupsModal({ isOpen, onClose }: BackupsModalProps) {
       const currentPlatform = platform();
 
       // Construct the backup file path
-      let backupPath = `${repo.path}/.git/recover/${selectedBackup}/${file}`;
+      let backupPath = `${repo.path}/.git/recover/${backupId}/${file}`;
 
       if (currentPlatform === 'windows') {
         // Windows: Use explorer /select with backslashes
@@ -166,6 +275,32 @@ export function BackupsModal({ isOpen, onClose }: BackupsModalProps) {
       }
     } catch (error) {
       toast.error('Failed to reveal file');
+    }
+  };
+
+  const handleOpenFile = async (file: string, timestamp?: string) => {
+    if (!repo) return;
+    const backupId = timestamp || selectedBackup;
+    if (!backupId) return;
+
+    try {
+      const { Command } = await import('@tauri-apps/plugin-shell');
+      const { platform } = await import('@tauri-apps/plugin-os');
+      const currentPlatform = platform();
+
+      // Construct the backup file path
+      let backupPath = `${repo.path}/.git/recover/${backupId}/${file}`;
+
+      if (currentPlatform === 'windows') {
+        // Windows: Use default application to open file
+        backupPath = backupPath.replace(/\//g, '\\');
+        await Command.create('cmd', ['/c', 'start', '', backupPath]).execute();
+      } else {
+        // Linux: Use xdg-open to open with default application
+        await Command.create('xdg-open', [backupPath]).execute();
+      }
+    } catch (error) {
+      toast.error('Failed to open file');
     }
   };
 
@@ -237,9 +372,36 @@ export function BackupsModal({ isOpen, onClose }: BackupsModalProps) {
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-[800px] max-h-[600px] flex flex-col">
           {/* Header */}
           <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-              Backups of discarded files
-            </h2>
+            <div className="flex items-center gap-4">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                Backups
+              </h2>
+              {/* View Toggle */}
+              <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-700 rounded p-1">
+                <button
+                  onClick={() => setViewMode('by-time')}
+                  className={`px-3 py-1 text-xs rounded flex items-center gap-1 ${
+                    viewMode === 'by-time'
+                      ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 font-semibold shadow-sm'
+                      : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'
+                  }`}
+                >
+                  <Clock className="w-3 h-3" />
+                  By Time
+                </button>
+                <button
+                  onClick={() => setViewMode('by-file')}
+                  className={`px-3 py-1 text-xs rounded flex items-center gap-1 ${
+                    viewMode === 'by-file'
+                      ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 font-semibold shadow-sm'
+                      : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'
+                  }`}
+                >
+                  <FileText className="w-3 h-3" />
+                  By File
+                </button>
+              </div>
+            </div>
             <div className="flex items-center gap-2">
               <button
                 onClick={handleClearBackups}
@@ -252,7 +414,7 @@ export function BackupsModal({ isOpen, onClose }: BackupsModalProps) {
               </button>
               <button
                 onClick={onClose}
-                className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
+                className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded text-gray-700 dark:text-gray-300"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -261,89 +423,192 @@ export function BackupsModal({ isOpen, onClose }: BackupsModalProps) {
 
         {/* Content */}
         <div className="flex flex-1 overflow-hidden">
-          {/* Left: Backup timestamps */}
-          <div className="w-1/3 border-r border-gray-200 dark:border-gray-700 overflow-y-auto">
-            {isLoading && backups.length === 0 ? (
-              <div className="p-4 text-center text-gray-500 dark:text-gray-400">
-                Loading...
+          {viewMode === 'by-time' ? (
+            <>
+              {/* BY TIME VIEW */}
+              {/* Left: Backup timestamps */}
+              <div className="w-1/3 border-r border-gray-200 dark:border-gray-700 overflow-y-auto">
+                {isLoading && backups.length === 0 ? (
+                  <div className="p-4 text-center text-gray-500 dark:text-gray-400">
+                    Loading...
+                  </div>
+                ) : backups.length === 0 ? (
+                  <div className="p-4 text-center text-gray-500 dark:text-gray-400">
+                    No backups yet
+                  </div>
+                ) : (
+                  backups.map((backup) => (
+                    <button
+                      key={backup}
+                      onClick={() => setSelectedBackup(backup)}
+                      className={`w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 ${
+                        selectedBackup === backup
+                          ? 'bg-blue-100 dark:bg-blue-900 text-blue-900 dark:text-blue-100'
+                          : 'text-gray-700 dark:text-gray-300'
+                      }`}
+                    >
+                      {formatTimestamp(backup)}
+                    </button>
+                  ))
+                )}
               </div>
-            ) : backups.length === 0 ? (
-              <div className="p-4 text-center text-gray-500 dark:text-gray-400">
-                No backups yet
-              </div>
-            ) : (
-              backups.map((backup) => (
-                <button
-                  key={backup}
-                  onClick={() => setSelectedBackup(backup)}
-                  className={`w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 ${
-                    selectedBackup === backup
-                      ? 'bg-blue-100 dark:bg-blue-900 text-blue-900 dark:text-blue-100'
-                      : 'text-gray-700 dark:text-gray-300'
-                  }`}
-                >
-                  {formatTimestamp(backup)}
-                </button>
-              ))
-            )}
-          </div>
 
-          {/* Right: Files in selected backup */}
-          <div className="flex-1 flex flex-col">
-            {selectedBackup && (
-              <>
-                {/* File list header */}
-                <div className="px-4 py-2 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-                  <label className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={selectedFiles.size === files.length && files.length > 0}
-                      onChange={handleSelectAll}
-                      className="rounded"
-                    />
-                    Select all ({files.length})
-                  </label>
-                </div>
-
-                {/* File list */}
-                <div className="flex-1 overflow-y-auto">
-                  {isLoading ? (
-                    <div className="p-4 text-center text-gray-500 dark:text-gray-400">
-                      Loading files...
-                    </div>
-                  ) : files.length === 0 ? (
-                    <div className="p-4 text-center text-gray-500 dark:text-gray-400">
-                      No files in this backup
-                    </div>
-                  ) : (
-                    files.map((file) => (
-                      <div
-                        key={file}
-                        className="flex items-center gap-2 px-4 py-2 hover:bg-gray-50 dark:hover:bg-gray-700 border-b border-gray-100 dark:border-gray-700"
-                      >
+              {/* Right: Files in selected backup */}
+              <div className="flex-1 flex flex-col">
+                {selectedBackup && (
+                  <>
+                    {/* File list header */}
+                    <div className="px-4 py-2 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                      <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
                         <input
                           type="checkbox"
-                          checked={selectedFiles.has(file)}
-                          onChange={() => handleToggleFile(file)}
+                          checked={selectedFiles.size === files.length && files.length > 0}
+                          onChange={handleSelectAll}
                           className="rounded"
                         />
-                        <span className="flex-1 text-sm font-mono text-gray-700 dark:text-gray-300">
-                          {file}
+                        Select all ({files.length})
+                      </label>
+                    </div>
+
+                    {/* File list */}
+                    <div className="flex-1 overflow-y-auto">
+                      {isLoading ? (
+                        <div className="p-4 text-center text-gray-500 dark:text-gray-400">
+                          Loading files...
+                        </div>
+                      ) : files.length === 0 ? (
+                        <div className="p-4 text-center text-gray-500 dark:text-gray-400">
+                          No files in this backup
+                        </div>
+                      ) : (
+                        files.map((file) => (
+                          <div
+                            key={file}
+                            className="flex items-center gap-2 px-4 py-2 hover:bg-gray-50 dark:hover:bg-gray-700 border-b border-gray-100 dark:border-gray-700"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={selectedFiles.has(file)}
+                              onChange={() => handleToggleFile(file)}
+                              className="rounded"
+                            />
+                            <span className="flex-1 text-sm font-mono text-gray-700 dark:text-gray-300">
+                              {file}
+                            </span>
+                            <button
+                              onClick={() => handleOpenFile(file)}
+                              className="p-1 hover:bg-gray-200 dark:hover:bg-gray-600 rounded text-gray-600 dark:text-gray-400"
+                              title="Open file"
+                            >
+                              <ExternalLink className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleRevealFile(file)}
+                              className="p-1 hover:bg-gray-200 dark:hover:bg-gray-600 rounded text-gray-600 dark:text-gray-400"
+                              title="Reveal on disk"
+                            >
+                              <FolderOpen className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            </>
+          ) : (
+            <>
+              {/* BY FILE VIEW */}
+              {/* Left: Files with version count */}
+              <div className="w-1/3 border-r border-gray-200 dark:border-gray-700 overflow-y-auto">
+                {isLoading && fileGroups.length === 0 ? (
+                  <div className="p-4 text-center text-gray-500 dark:text-gray-400">
+                    Loading...
+                  </div>
+                ) : fileGroups.length === 0 ? (
+                  <div className="p-4 text-center text-gray-500 dark:text-gray-400">
+                    No files backed up
+                  </div>
+                ) : (
+                  fileGroups.map((group) => (
+                    <button
+                      key={group.path}
+                      onClick={() => {
+                        setSelectedFilePath(group.path);
+                        setSelectedVersion(null);
+                      }}
+                      className={`w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 ${
+                        selectedFilePath === group.path
+                          ? 'bg-blue-100 dark:bg-blue-900 text-blue-900 dark:text-blue-100'
+                          : 'text-gray-700 dark:text-gray-300'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-sm font-mono truncate">{group.path}</span>
+                        <span className="text-xs bg-gray-200 dark:bg-gray-600 px-2 py-0.5 rounded-full flex-shrink-0">
+                          {group.versions.length}
                         </span>
-                        <button
-                          onClick={() => handleRevealFile(file)}
-                          className="p-1 hover:bg-gray-200 dark:hover:bg-gray-600 rounded"
-                          title="Reveal on disk"
-                        >
-                          <FolderOpen className="w-4 h-4" />
-                        </button>
                       </div>
-                    ))
-                  )}
-                </div>
-              </>
-            )}
-          </div>
+                    </button>
+                  ))
+                )}
+              </div>
+
+              {/* Right: Versions timeline */}
+              <div className="flex-1 flex flex-col">
+                {selectedFilePath && (
+                  <>
+                    {/* Header */}
+                    <div className="px-4 py-2 border-b border-gray-200 dark:border-gray-700">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-gray-700 dark:text-gray-300">
+                          Select a version to restore
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Versions list */}
+                    <div className="flex-1 overflow-y-auto">
+                      {fileGroups
+                        .find(g => g.path === selectedFilePath)
+                        ?.versions.map((timestamp) => (
+                          <div
+                            key={timestamp}
+                            className="flex items-center gap-2 px-4 py-2 hover:bg-gray-50 dark:hover:bg-gray-700 border-b border-gray-100 dark:border-gray-700"
+                          >
+                            <input
+                              type="radio"
+                              name="version-selection"
+                              checked={selectedVersion === timestamp}
+                              onChange={() => setSelectedVersion(timestamp)}
+                              className="rounded-full"
+                            />
+                            <span className="flex-1 text-sm text-gray-700 dark:text-gray-300">
+                              {formatTimestamp(timestamp)}
+                            </span>
+                            <button
+                              onClick={() => handleOpenFile(selectedFilePath, timestamp)}
+                              className="p-1 hover:bg-gray-200 dark:hover:bg-gray-600 rounded text-gray-600 dark:text-gray-400"
+                              title="Open file"
+                            >
+                              <ExternalLink className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleRevealFile(selectedFilePath, timestamp)}
+                              className="p-1 hover:bg-gray-200 dark:hover:bg-gray-600 rounded text-gray-600 dark:text-gray-400"
+                              title="Reveal on disk"
+                            >
+                              <FolderOpen className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            </>
+          )}
         </div>
 
         {/* Footer */}
@@ -354,22 +619,35 @@ export function BackupsModal({ isOpen, onClose }: BackupsModalProps) {
           >
             Cancel
           </button>
-          <button
-            onClick={handleRestoreAll}
-            disabled={!selectedBackup || files.length === 0 || isRestoring}
-            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-          >
-            <RotateCcw className="w-4 h-4" />
-            Restore All
-          </button>
-          <button
-            onClick={handleRestoreSelected}
-            disabled={!selectedBackup || selectedFiles.size === 0 || isRestoring}
-            className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-          >
-            <RotateCcw className="w-4 h-4" />
-            Restore Selected ({selectedFiles.size})
-          </button>
+          {viewMode === 'by-time' ? (
+            <>
+              <button
+                onClick={handleRestoreAll}
+                disabled={!selectedBackup || files.length === 0 || isRestoring}
+                className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                <RotateCcw className="w-4 h-4" />
+                Restore All
+              </button>
+              <button
+                onClick={handleRestoreSelected}
+                disabled={!selectedBackup || selectedFiles.size === 0 || isRestoring}
+                className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                <RotateCcw className="w-4 h-4" />
+                Restore Selected ({selectedFiles.size})
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={handleRestoreSelected}
+              disabled={!selectedFilePath || !selectedVersion || isRestoring}
+              className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              <RotateCcw className="w-4 h-4" />
+              Restore Selected Version
+            </button>
+          )}
         </div>
       </div>
     </div>

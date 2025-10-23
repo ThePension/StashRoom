@@ -274,6 +274,32 @@ fn collect_files_recursive(
     Ok(())
 }
 
+/// Check if a file is dirty (has unstaged or staged changes)
+fn is_file_dirty(repo: &Repository, path: &str) -> Result<bool> {
+    let mut opts = git2::StatusOptions::new();
+    opts.pathspec(path);
+
+    let statuses = repo.statuses(Some(&mut opts))
+        .context("Failed to get file status")?;
+
+    if statuses.is_empty() {
+        // File is not tracked or doesn't exist
+        return Ok(false);
+    }
+
+    let status = statuses.get(0).unwrap().status();
+
+    // Check if file has any changes (staged or unstaged)
+    Ok(status.intersects(
+        git2::Status::INDEX_MODIFIED |
+        git2::Status::INDEX_NEW |
+        git2::Status::INDEX_DELETED |
+        git2::Status::WT_MODIFIED |
+        git2::Status::WT_DELETED |
+        git2::Status::WT_NEW
+    ))
+}
+
 /// Restores multiple files from a backup
 pub fn restore_many(
     repo: &Repository,
@@ -302,7 +328,17 @@ pub fn restore_many(
             anyhow::bail!("Backup file not found: {}/{}", backup_id, path);
         }
 
-        let file_path = workdir.join(path);
+        // Check if file is dirty (has unstaged or staged changes)
+        let is_dirty = is_file_dirty(repo, path)?;
+
+        let file_path = if is_dirty {
+            // Non-destructive restore: write to .restore file
+            let restore_path = format!("{}.restore", path);
+            workdir.join(&restore_path)
+        } else {
+            // Clean file: restore in-place
+            workdir.join(path)
+        };
 
         // Validate that the resolved path is within the working directory
         let canonical_workdir = workdir.canonicalize()
@@ -324,11 +360,11 @@ pub fn restore_many(
                 }
             }
             // For non-existent paths, verify the logical path is safe
-            workdir.join(normalized_path)
+            file_path.clone()
         };
 
         // Final check: if we were able to canonicalize, verify it's within workdir
-        if path_to_check != workdir.join(normalized_path) {
+        if path_to_check != file_path {
             if let Ok(canonical) = path_to_check.canonicalize() {
                 if !canonical.starts_with(&canonical_workdir) {
                     anyhow::bail!("Target path is outside working directory: {}", path);
@@ -812,14 +848,19 @@ mod tests {
         assert_eq!(status.entries.len(), 1);
         assert!(status.entries[0].unstaged_status.is_some());
 
-        // Restore the backup - this WILL overwrite the current unstaged changes
-        // This is the current behavior; we document it as a known issue
+        // Restore the backup - should create .restore file (non-destructive)
         let restore_result = restore_many(&repo, &backup_id, &["file.txt".to_string()]);
         assert!(restore_result.is_ok());
 
-        // Verify content is from backup, not from current work
+        // Verify original file is untouched
         let content = fs::read_to_string(&file_path).unwrap();
-        assert_eq!(content, "modified v1");
+        assert_eq!(content, "modified v2 - current work");
+
+        // Verify backup is in .restore file
+        let restore_path = temp_dir.path().join("file.txt.restore");
+        assert!(restore_path.exists());
+        let restore_content = fs::read_to_string(&restore_path).unwrap();
+        assert_eq!(restore_content, "modified v1");
     }
 
     #[test]
@@ -851,14 +892,20 @@ mod tests {
         fs::remove_dir_all(&dir_path).unwrap();
         assert!(!dir_path.exists());
 
-        // Restore should recreate the directory structure
+        // Verify file is tracked as deleted (dirty state)
+        let status = crate::core::status::get_status(&repo).unwrap();
+        assert_eq!(status.entries.len(), 1);
+        assert!(status.entries[0].unstaged_status.is_some());
+
+        // Restore should create .restore file (non-destructive because file is dirty/deleted)
         let restore_result = restore_many(&repo, &backup_id, &["subdir/file.txt".to_string()]);
         assert!(restore_result.is_ok());
 
-        // Verify directory and file were recreated
+        // Verify directory and .restore file were created
         assert!(dir_path.exists());
-        assert!(file_path.exists());
-        let content = fs::read_to_string(&file_path).unwrap();
+        let restore_path = dir_path.join("file.txt.restore");
+        assert!(restore_path.exists());
+        let content = fs::read_to_string(&restore_path).unwrap();
         assert_eq!(content, "modified");
     }
 
@@ -1260,5 +1307,182 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn test_restore_clean_file_in_place() {
+        let (temp_dir, repo) = create_test_repo();
+
+        // Create and commit a file
+        let file_path = temp_dir.path().join("file.txt");
+        fs::write(&file_path, "original").unwrap();
+
+        let mut index = repo.index().unwrap();
+        index.add_path(Path::new("file.txt")).unwrap();
+        index.write().unwrap();
+
+        let tree_id = index.write_tree().unwrap();
+        let tree = repo.find_tree(tree_id).unwrap();
+        let sig = git2::Signature::now("Test", "test@example.com").unwrap();
+        let parent = repo.head().unwrap().peel_to_commit().unwrap();
+        repo.commit(Some("HEAD"), &sig, &sig, "Initial", &tree, &[&parent]).unwrap();
+
+        // Modify and discard to create backup
+        fs::write(&file_path, "modified").unwrap();
+        let result = discard(&repo, "file.txt", None).unwrap();
+        let backup_id = result.backup_timestamp.unwrap();
+
+        // File is now clean (back to "original")
+        let content = fs::read_to_string(&file_path).unwrap();
+        assert_eq!(content, "original");
+
+        // Restore should happen in-place since file is clean
+        let restore_result = restore_many(&repo, &backup_id, &["file.txt".to_string()]);
+        assert!(restore_result.is_ok());
+
+        // Should restore to the exact file (not .restore)
+        assert!(file_path.exists());
+        assert!(!temp_dir.path().join("file.txt.restore").exists());
+
+        let content = fs::read_to_string(&file_path).unwrap();
+        assert_eq!(content, "modified");
+    }
+
+    #[test]
+    fn test_restore_dirty_file_non_destructive() {
+        let (temp_dir, repo) = create_test_repo();
+
+        // Create and commit a file
+        let file_path = temp_dir.path().join("file.txt");
+        fs::write(&file_path, "original").unwrap();
+
+        let mut index = repo.index().unwrap();
+        index.add_path(Path::new("file.txt")).unwrap();
+        index.write().unwrap();
+
+        let tree_id = index.write_tree().unwrap();
+        let tree = repo.find_tree(tree_id).unwrap();
+        let sig = git2::Signature::now("Test", "test@example.com").unwrap();
+        let parent = repo.head().unwrap().peel_to_commit().unwrap();
+        repo.commit(Some("HEAD"), &sig, &sig, "Initial", &tree, &[&parent]).unwrap();
+
+        // Modify and discard to create backup
+        fs::write(&file_path, "backup version").unwrap();
+        let result = discard(&repo, "file.txt", None).unwrap();
+        let backup_id = result.backup_timestamp.unwrap();
+
+        // Make new unstaged changes (file is now dirty)
+        fs::write(&file_path, "current work - IMPORTANT").unwrap();
+
+        // Verify the file has unstaged changes
+        let status = crate::core::status::get_status(&repo).unwrap();
+        assert_eq!(status.entries.len(), 1);
+        assert!(status.entries[0].unstaged_status.is_some());
+
+        // Restore the backup - should create .restore file instead of overwriting
+        let restore_result = restore_many(&repo, &backup_id, &["file.txt".to_string()]);
+        assert!(restore_result.is_ok());
+
+        // Original file should be untouched
+        let content = fs::read_to_string(&file_path).unwrap();
+        assert_eq!(content, "current work - IMPORTANT");
+
+        // Backup should be in .restore file
+        let restore_path = temp_dir.path().join("file.txt.restore");
+        assert!(restore_path.exists());
+        let restore_content = fs::read_to_string(&restore_path).unwrap();
+        assert_eq!(restore_content, "backup version");
+    }
+
+    #[test]
+    fn test_restore_staged_file_non_destructive() {
+        let (temp_dir, repo) = create_test_repo();
+
+        // Create and commit a file
+        let file_path = temp_dir.path().join("file.txt");
+        fs::write(&file_path, "original").unwrap();
+
+        let mut index = repo.index().unwrap();
+        index.add_path(Path::new("file.txt")).unwrap();
+        index.write().unwrap();
+
+        let tree_id = index.write_tree().unwrap();
+        let tree = repo.find_tree(tree_id).unwrap();
+        let sig = git2::Signature::now("Test", "test@example.com").unwrap();
+        let parent = repo.head().unwrap().peel_to_commit().unwrap();
+        repo.commit(Some("HEAD"), &sig, &sig, "Initial", &tree, &[&parent]).unwrap();
+
+        // Modify and discard to create backup
+        fs::write(&file_path, "backup version").unwrap();
+        let result = discard(&repo, "file.txt", None).unwrap();
+        let backup_id = result.backup_timestamp.unwrap();
+
+        // Make staged changes (file is now dirty)
+        fs::write(&file_path, "staged work").unwrap();
+        let mut index = repo.index().unwrap();
+        index.add_path(Path::new("file.txt")).unwrap();
+        index.write().unwrap();
+
+        // Verify the file has staged changes
+        let status = crate::core::status::get_status(&repo).unwrap();
+        assert_eq!(status.entries.len(), 1);
+        assert!(status.entries[0].staged_status.is_some());
+
+        // Restore the backup - should create .restore file instead of overwriting
+        let restore_result = restore_many(&repo, &backup_id, &["file.txt".to_string()]);
+        assert!(restore_result.is_ok());
+
+        // Original file should be untouched
+        let content = fs::read_to_string(&file_path).unwrap();
+        assert_eq!(content, "staged work");
+
+        // Backup should be in .restore file
+        let restore_path = temp_dir.path().join("file.txt.restore");
+        assert!(restore_path.exists());
+        let restore_content = fs::read_to_string(&restore_path).unwrap();
+        assert_eq!(restore_content, "backup version");
+    }
+
+    #[test]
+    fn test_restore_dirty_file_in_subdirectory() {
+        let (temp_dir, repo) = create_test_repo();
+
+        // Create and commit a file in a subdirectory
+        let dir_path = temp_dir.path().join("subdir");
+        fs::create_dir(&dir_path).unwrap();
+        let file_path = dir_path.join("file.txt");
+        fs::write(&file_path, "original").unwrap();
+
+        let mut index = repo.index().unwrap();
+        index.add_path(Path::new("subdir/file.txt")).unwrap();
+        index.write().unwrap();
+
+        let tree_id = index.write_tree().unwrap();
+        let tree = repo.find_tree(tree_id).unwrap();
+        let sig = git2::Signature::now("Test", "test@example.com").unwrap();
+        let parent = repo.head().unwrap().peel_to_commit().unwrap();
+        repo.commit(Some("HEAD"), &sig, &sig, "Initial", &tree, &[&parent]).unwrap();
+
+        // Modify and discard to create backup
+        fs::write(&file_path, "backup version").unwrap();
+        let result = discard(&repo, "subdir/file.txt", None).unwrap();
+        let backup_id = result.backup_timestamp.unwrap();
+
+        // Make new unstaged changes (file is now dirty)
+        fs::write(&file_path, "current work").unwrap();
+
+        // Restore the backup - should create .restore file in subdirectory
+        let restore_result = restore_many(&repo, &backup_id, &["subdir/file.txt".to_string()]);
+        assert!(restore_result.is_ok());
+
+        // Original file should be untouched
+        let content = fs::read_to_string(&file_path).unwrap();
+        assert_eq!(content, "current work");
+
+        // Backup should be in .restore file in subdirectory
+        let restore_path = dir_path.join("file.txt.restore");
+        assert!(restore_path.exists());
+        let restore_content = fs::read_to_string(&restore_path).unwrap();
+        assert_eq!(restore_content, "backup version");
     }
 }
