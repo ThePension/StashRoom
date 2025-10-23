@@ -10,13 +10,18 @@ A modern desktop Git client built with Rust (Tauri) + React + TypeScript.
 ## Features
 
 - **Three-Panel Interface**: Unstaged changes, diff viewer, staged changes + commit
+- **Multi-Repository Support**: Open and manage multiple repositories simultaneously with tab-based interface
+- **Persistent Workspace**: Automatically restores open repositories and settings across app restarts
 - **Fast**: Virtualized lists handle 10,000+ files smoothly
 - **Keyboard-First**: Navigate, stage, commit without touching the mouse
-- **Hunk Staging**: Stage individual hunks or entire files
+- **Hunk Staging**: Stage individual hunks or specific lines from hunks
 - **Safe Discard**: Automatic backups before discarding changes
-- **Live Updates**: Filesystem watching with auto-refresh
+- **Live Updates**: Filesystem watching with auto-refresh per repository
 - **Commits History**: Visualize all commits and changes
-- **Branches management**: Manage your branches locally
+- **Branch Management**: Switch between local branches and view branch information
+- **Universal Search**: Quick search (Ctrl+P) to find files across commit history with fuzzy matching
+- **Theme Support**: Light, dark, and system theme options
+- **Compact Mode**: Space-efficient UI option for smaller screens
 
 ## Quick Start
 
@@ -62,6 +67,8 @@ See [QUICKSTART.md](./QUICKSTART.md) for detailed instructions.
 | Key | Action |
 |-----|--------|
 | `?` | Show keyboard shortcuts help |
+| `Ctrl+P` | Universal quick search |
+| `Ctrl+,` | Open settings |
 | `↑` / `↓` | Navigate file list |
 | `Enter` | View file diff |
 | `S` | Stage/unstage selected file |
