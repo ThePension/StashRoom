@@ -208,11 +208,13 @@ export function ChangeList({ type }: ChangeListProps) {
       });
 
       if (response.ok && response.data) {
+        const { status, backupTimestamp } = response.data;
+
         // Update the status first
-        useStore.getState().updateStatus(response.data);
+        useStore.getState().updateStatus(status);
 
         // Check if the file still has unstaged changes in the updated status
-        const fileStillInUnstaged = response.data.entries.some(
+        const fileStillInUnstaged = status.entries.some(
           e => e.path === discardedPath && (e.unstagedStatus !== null || e.untracked)
         );
 
@@ -222,7 +224,32 @@ export function ChangeList({ type }: ChangeListProps) {
           useStore.getState().clearDiff();
         }
 
-        toast.success(`Discarded changes to ${discardedPath}`);
+        // Show success toast with undo option if backup was created
+        if (backupTimestamp) {
+          toast.success(`Discarded changes to ${discardedPath}`, {
+            action: {
+              label: 'Undo',
+              onClick: async () => {
+                try {
+                  const restoreResponse = await api.restoreFromBackup(
+                    repo.repoId,
+                    backupTimestamp,
+                    discardedPath
+                  );
+                  if (restoreResponse.ok && restoreResponse.data) {
+                    useStore.getState().updateStatus(restoreResponse.data);
+                    await useStore.getState().refreshStatus(repo.repoId, true);
+                    toast.success(`Restored ${discardedPath}`);
+                  }
+                } catch (error) {
+                  toast.error('Failed to restore file');
+                }
+              },
+            },
+          });
+        } else {
+          toast.success(`Discarded changes to ${discardedPath}`);
+        }
       } else {
         toast.error(response.message || 'Failed to discard changes');
       }

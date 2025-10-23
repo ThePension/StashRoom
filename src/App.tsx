@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { Toaster } from 'sonner';
-import { Settings, FolderOpen, Terminal as TerminalIcon } from 'lucide-react';
+import { Settings, FolderOpen, Terminal as TerminalIcon, Archive } from 'lucide-react';
 import { useStore } from './state/store';
 import { ChangeList } from './components/ChangeList';
 import { DiffPanel } from './components/DiffPanel';
@@ -12,6 +12,7 @@ import { BranchPanel } from './components/BranchPanel';
 import { SettingsDialog } from './components/SettingsDialog';
 import { QuickSearchModal } from './components/QuickSearchModal';
 import { RepoTabs } from './components/RepoTabs';
+import { BackupsModal } from './components/BackupsModal';
 
 function App() {
   const getActiveRepo = useStore((s) => s.getActiveRepo);
@@ -25,6 +26,7 @@ function App() {
   const [showHistory, setShowHistory] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showQuickSearch, setShowQuickSearch] = useState(false);
+  const [showBackups, setShowBackups] = useState(false);
 
   // Apply theme based on settings - runs on every theme change
   useEffect(() => {
@@ -181,6 +183,7 @@ function App() {
         onClose={() => setShowQuickSearch(false)}
         onNavigateToHistory={() => setShowHistory(true)}
       />
+      <BackupsModal isOpen={showBackups} onClose={() => setShowBackups(false)} />
 
       {/* Progress Bar */}
       {(isLoading || isOperating) && (
@@ -223,6 +226,13 @@ function App() {
             title="Open terminal at repository location"
           >
             <TerminalIcon className={compactMode ? 'w-4 h-4' : 'w-5 h-5'} />
+          </button>
+          <button
+            onClick={() => setShowBackups(true)}
+            className={`${compactMode ? 'p-1' : 'p-2'} text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700 rounded`}
+            title="Backups"
+          >
+            <Archive className={compactMode ? 'w-4 h-4' : 'w-5 h-5'} />
           </button>
           <button
             onClick={() => setShowSettings(true)}

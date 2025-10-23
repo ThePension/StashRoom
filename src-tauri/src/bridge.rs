@@ -168,7 +168,7 @@ pub fn unstage_file(
 // ============================================================================
 
 #[tauri::command]
-pub fn discard(request: DiscardRequest, state: State<AppState>) -> ApiResponse<StatusMatrix> {
+pub fn discard(request: DiscardRequest, state: State<AppState>) -> ApiResponse<discard::DiscardResult> {
     let repo = match state.repo_registry.get_repo(&request.repo_id) {
         Ok(r) => r,
         Err(e) => return ApiResponse::error("REPO_NOT_FOUND".to_string(), e.to_string()),
@@ -176,7 +176,7 @@ pub fn discard(request: DiscardRequest, state: State<AppState>) -> ApiResponse<S
 
     let hunks = request.hunks.as_deref();
     match discard::discard(&repo, &request.path, hunks) {
-        Ok(status) => ApiResponse::success(status),
+        Ok(result) => ApiResponse::success(result),
         Err(e) => ApiResponse::error("DISCARD_ERROR".to_string(), e.to_string()),
     }
 }
@@ -630,6 +630,50 @@ pub fn validate_repo_paths(paths: Vec<String>) -> ApiResponse<Vec<ValidatedRepo>
         .collect();
 
     ApiResponse::success(validated)
+}
+
+#[tauri::command]
+pub fn list_backup_files(repo_id: String, backup_id: String, state: State<AppState>) -> ApiResponse<Vec<String>> {
+    let repo = match state.repo_registry.get_repo(&repo_id) {
+        Ok(r) => r,
+        Err(e) => return ApiResponse::error("REPO_NOT_FOUND".to_string(), e.to_string()),
+    };
+
+    match discard::list_backup_files(&repo, &backup_id) {
+        Ok(files) => ApiResponse::success(files),
+        Err(e) => ApiResponse::error("BACKUP_FILES_ERROR".to_string(), e.to_string()),
+    }
+}
+
+#[tauri::command]
+pub fn restore_many(
+    repo_id: String,
+    backup_id: String,
+    paths: Vec<String>,
+    state: State<AppState>,
+) -> ApiResponse<StatusMatrix> {
+    let repo = match state.repo_registry.get_repo(&repo_id) {
+        Ok(r) => r,
+        Err(e) => return ApiResponse::error("REPO_NOT_FOUND".to_string(), e.to_string()),
+    };
+
+    match discard::restore_many(&repo, &backup_id, &paths) {
+        Ok(status) => ApiResponse::success(status),
+        Err(e) => ApiResponse::error("RESTORE_MANY_ERROR".to_string(), e.to_string()),
+    }
+}
+
+#[tauri::command]
+pub fn clear_backups(repo_id: String, state: State<AppState>) -> ApiResponse<()> {
+    let repo = match state.repo_registry.get_repo(&repo_id) {
+        Ok(r) => r,
+        Err(e) => return ApiResponse::error("REPO_NOT_FOUND".to_string(), e.to_string()),
+    };
+
+    match discard::clear_backups(&repo) {
+        Ok(_) => ApiResponse::success(()),
+        Err(e) => ApiResponse::error("CLEAR_BACKUPS_ERROR".to_string(), e.to_string()),
+    }
 }
 
 #[cfg(test)]

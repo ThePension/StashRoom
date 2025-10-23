@@ -120,6 +120,11 @@ export interface DiscardRequest {
   hunks: number[] | null;
 }
 
+export interface DiscardResult {
+  status: StatusMatrix;
+  backupTimestamp: string | null;
+}
+
 // ============================================================================
 // Commit Operations
 // ============================================================================

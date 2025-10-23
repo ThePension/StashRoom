@@ -35,7 +35,10 @@ pub fn run() {
             bridge::get_commit_diff,
             bridge::search_files,
             bridge::list_backups,
+            bridge::list_backup_files,
             bridge::restore_from_backup,
+            bridge::restore_many,
+            bridge::clear_backups,
             bridge::validate_repo_paths,
         ])
         .run(tauri::generate_context!())

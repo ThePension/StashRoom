@@ -11,6 +11,7 @@ import type {
   StageHunkRequest,
   StageLinesRequest,
   DiscardRequest,
+  DiscardResult,
   CommitRequest,
   CommitResponse,
   WatchEvent,
@@ -93,8 +94,8 @@ class GitAPI {
   /**
    * Discards changes to a file or specific hunks
    */
-  async discard(request: DiscardRequest): Promise<ApiResponse<StatusMatrix>> {
-    return invoke<ApiResponse<StatusMatrix>>('discard', { request });
+  async discard(request: DiscardRequest): Promise<ApiResponse<DiscardResult>> {
+    return invoke<ApiResponse<DiscardResult>>('discard', { request });
   }
 
   /**
@@ -145,6 +146,27 @@ class GitAPI {
       backupId,
       path,
     });
+  }
+
+  /**
+   * Lists all files in a specific backup
+   */
+  async listBackupFiles(repoId: string, backupId: string): Promise<ApiResponse<string[]>> {
+    return invoke<ApiResponse<string[]>>('list_backup_files', { repoId, backupId });
+  }
+
+  /**
+   * Restores multiple files from a backup
+   */
+  async restoreMany(repoId: string, backupId: string, paths: string[]): Promise<ApiResponse<StatusMatrix>> {
+    return invoke<ApiResponse<StatusMatrix>>('restore_many', { repoId, backupId, paths });
+  }
+
+  /**
+   * Clears all backups for a repository
+   */
+  async clearBackups(repoId: string): Promise<ApiResponse<void>> {
+    return invoke<ApiResponse<void>>('clear_backups', { repoId });
   }
 
   /**
