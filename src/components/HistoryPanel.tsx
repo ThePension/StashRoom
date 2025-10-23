@@ -4,7 +4,8 @@ import { useStore } from '../state/store';
 import type { CommitSummary, CommitFileDiff } from '../lib/types';
 
 export function HistoryPanel() {
-  const repo = useStore((s) => s.repo);
+  const getActiveRepo = useStore((s) => s.getActiveRepo);
+  const repo = getActiveRepo();
   const commits = useStore((s) => s.commits);
   const hasMore = useStore((s) => s.hasMore);
   const isLoading = useStore((s) => s.isLoading);

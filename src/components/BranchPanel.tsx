@@ -5,7 +5,8 @@ import { toast } from 'sonner';
 import type { BranchInfo } from '../lib/types';
 
 export function BranchPanel() {
-  const repo = useStore((s) => s.repo);
+  const getActiveRepo = useStore((s) => s.getActiveRepo);
+  const repo = getActiveRepo();
   const compactMode = useStore((s) => s.settings.compactMode);
   const [branches, setBranches] = useState<BranchInfo[]>([]);
   const [currentBranch, setCurrentBranch] = useState<string | null>(null);
@@ -16,7 +17,7 @@ export function BranchPanel() {
     if (repo) {
       loadBranches();
     }
-  }, [repo]);
+  }, [repo?.repoId]);
 
   const loadBranches = async () => {
     if (!repo) return;

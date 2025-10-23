@@ -15,6 +15,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             bridge::open_repo,
             bridge::close_repo,
+            bridge::list_repos,
             bridge::get_status,
             bridge::get_diff,
             bridge::stage_hunk,

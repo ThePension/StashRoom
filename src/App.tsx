@@ -11,9 +11,11 @@ import { HistoryPanel } from './components/HistoryPanel';
 import { BranchPanel } from './components/BranchPanel';
 import { SettingsDialog } from './components/SettingsDialog';
 import { QuickSearchModal } from './components/QuickSearchModal';
+import { RepoTabs } from './components/RepoTabs';
 
 function App() {
-  const repo = useStore((s) => s.repo);
+  const getActiveRepo = useStore((s) => s.getActiveRepo);
+  const repo = getActiveRepo();
   const isLoading = useStore((s) => s.isLoading);
   const isOperating = useStore((s) => s.isOperating);
   const openRepo = useStore((s) => s.openRepo);
@@ -179,6 +181,9 @@ function App() {
         <div className="h-1 w-full bg-blue-500 animate-pulse" />
       )}
 
+      {/* Repository Tabs */}
+      <RepoTabs />
+
       {/* Header */}
       <header className={`flex items-center justify-between ${compactMode ? 'px-2 py-1.5' : 'px-4 py-3'} bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700`}>
         <div className="flex items-center gap-4">
@@ -224,7 +229,7 @@ function App() {
             onClick={handleSelectRepo}
             className={`${compactMode ? 'px-2 py-0.5 text-xs' : 'px-3 py-1 text-sm'} text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200`}
           >
-            Change Repo
+            Open Repo
           </button>
         </div>
       </header>

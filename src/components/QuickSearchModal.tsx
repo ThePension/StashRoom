@@ -17,7 +17,8 @@ export function QuickSearchModal({ isOpen, onClose, onNavigateToHistory }: Quick
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set());
 
-  const repo = useStore((s) => s.repo);
+  const getActiveRepo = useStore((s) => s.getActiveRepo);
+  const repo = getActiveRepo();
   const selectCommit = useStore((s) => s.selectCommit);
   const selectCommitFile = useStore((s) => s.selectCommitFile);
 

@@ -4,7 +4,8 @@ import { api } from '../lib/api';
 import { toast } from 'sonner';
 
 export function DiffPanel() {
-  const repo = useStore((s) => s.repo);
+  const getActiveRepo = useStore((s) => s.getActiveRepo);
+  const repo = getActiveRepo();
   const currentDiff = useStore((s) => s.currentDiff);
   const currentDiffSide = useStore((s) => s.currentDiffSide);
   const selectedPath = useStore((s) => s.selectedPath);

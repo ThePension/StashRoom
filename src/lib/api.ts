@@ -41,6 +41,13 @@ class GitAPI {
   }
 
   /**
+   * Lists all currently open repositories
+   */
+  async listRepos(): Promise<ApiResponse<RepoOpenResponse[]>> {
+    return invoke<ApiResponse<RepoOpenResponse[]>>('list_repos');
+  }
+
+  /**
    * Gets the status of all files in the repository
    */
   async getStatus(repoId: string): Promise<ApiResponse<StatusMatrix>> {

@@ -11,7 +11,8 @@ interface ChangeListProps {
 }
 
 export function ChangeList({ type }: ChangeListProps) {
-  const repo = useStore((s) => s.repo);
+  const getActiveRepo = useStore((s) => s.getActiveRepo);
+  const repo = getActiveRepo();
   const allEntries = useStore((s) => s.entries);
   const selectedPath = useStore((s) => s.selectedPath);
   const setSelectedPath = useStore((s) => s.setSelectedPath);

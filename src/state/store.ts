@@ -11,11 +11,14 @@ import type {
 } from '../lib/types';
 
 interface RepoState {
-  repo: RepoOpenResponse | null;
+  repos: RepoOpenResponse[];
+  activeRepoId: string | null;
   isLoading: boolean;
   error: string | null;
   openRepo: (path: string) => Promise<void>;
-  closeRepo: () => Promise<void>;
+  closeRepo: (repoId: string) => Promise<void>;
+  setActiveRepo: (repoId: string) => Promise<void>;
+  getActiveRepo: () => RepoOpenResponse | null;
   updateHeadInfo: (repoId: string) => Promise<void>;
 }
 
@@ -91,19 +94,39 @@ export interface AppStore
 
 export const useStore = create<AppStore>((set, get) => ({
   // Repo state
-  repo: null,
+  repos: [],
+  activeRepoId: null,
   isLoading: false,
   error: null,
 
   openRepo: async (path: string) => {
     set({ isLoading: true, error: null });
     try {
+      // Check if repo is already open
+      const { repos } = get();
+      const existingRepo = repos.find(r => r.path === path);
+
+      if (existingRepo) {
+        // Repo already open, just switch to it
+        set({ isLoading: false });
+        await get().setActiveRepo(existingRepo.repoId);
+        toast.success(`Switched to repository: ${path}`);
+        return;
+      }
+
       const response = await api.openRepo({ path });
       if (response.ok && response.data) {
-        // Reset all state except settings when opening a new repo
-        set({
-          repo: response.data,
+        const newRepo = response.data;
+
+        // Add repo to list and make it active
+        set((state) => ({
+          repos: [...state.repos, newRepo],
+          activeRepoId: newRepo.repoId,
           isLoading: false,
+        }));
+
+        // Clear state when switching to new repo
+        set({
           entries: [],
           currentDiff: null,
           currentDiffSide: null,
@@ -117,40 +140,12 @@ export const useStore = create<AppStore>((set, get) => ({
           selectedCommitFile: null,
           selectedParent: 0,
         });
+
         // Automatically load status
-        await get().refreshStatus(response.data.repoId);
+        await get().refreshStatus(newRepo.repoId);
         // Subscribe to watch events
-        await api.subscribeWatch(response.data.repoId);
-        // Listen for watch events
-        api.onWatchEvent(async (event) => {
-          if (event.repoId === get().repo?.repoId) {
-            // Refresh status silently (no loading indicator) to avoid flicker
-            await get().refreshStatus(event.repoId, true);
+        await api.subscribeWatch(newRepo.repoId);
 
-            // If a file is currently selected, reload its diff to keep it in sync
-            const state = get();
-            if (state.selectedPath && state.currentDiffSide) {
-              // Check if the selected file still exists in the new status
-              const fileStillExists = state.entries.some(e => e.path === state.selectedPath);
-
-              if (fileStillExists) {
-                // Silently reload the diff for the currently selected file
-                const response = await api.getDiff({
-                  repoId: event.repoId,
-                  path: state.selectedPath,
-                  side: state.currentDiffSide,
-                });
-
-                if (response.ok && response.data) {
-                  set({ currentDiff: response.data });
-                }
-              } else {
-                // File was deleted or no longer has changes, clear the diff
-                state.clearDiff();
-              }
-            }
-          }
-        });
         toast.success(`Opened repository: ${path}`);
       } else {
         set({ error: response.message || 'Failed to open repository', isLoading: false });
@@ -163,35 +158,90 @@ export const useStore = create<AppStore>((set, get) => ({
     }
   },
 
-  closeRepo: async () => {
-    const { repo } = get();
-    if (repo) {
-      await api.unsubscribeWatch(repo.repoId);
-      await api.closeRepo(repo.repoId);
-      set({
-        repo: null,
-        entries: [],
-        currentDiff: null,
-        selectedPath: null,
-        selectedHunkIndex: null,
-        selectedLineIndices: [],
-      });
+  closeRepo: async (repoId: string) => {
+    const { repos, activeRepoId } = get();
+    const repoToClose = repos.find(r => r.repoId === repoId);
+
+    if (repoToClose) {
+      // Unsubscribe from watch events and close the repo
+      await api.unsubscribeWatch(repoId);
+      await api.closeRepo(repoId);
+
+      // Remove repo from list
+      const updatedRepos = repos.filter(r => r.repoId !== repoId);
+
+      // If we're closing the active repo, switch to another one or clear state
+      if (activeRepoId === repoId) {
+        const newActiveRepo = updatedRepos[0] || null;
+        set({
+          repos: updatedRepos,
+          activeRepoId: newActiveRepo?.repoId || null,
+          entries: [],
+          currentDiff: null,
+          selectedPath: null,
+          selectedHunkIndex: null,
+          selectedLineIndices: [],
+          commits: [],
+          hasMore: false,
+          selectedCommit: null,
+          commitDiff: null,
+          selectedCommitFile: null,
+        });
+
+        // Load status for new active repo if exists
+        if (newActiveRepo) {
+          await get().refreshStatus(newActiveRepo.repoId);
+        }
+      } else {
+        set({ repos: updatedRepos });
+      }
     }
   },
 
+  setActiveRepo: async (repoId: string) => {
+    const { activeRepoId } = get();
+    if (activeRepoId === repoId) return;
+
+    set({ activeRepoId: repoId });
+
+    // Clear and reload state for the new active repo
+    set({
+      entries: [],
+      currentDiff: null,
+      currentDiffSide: null,
+      selectedPath: null,
+      selectedHunkIndex: null,
+      selectedLineIndices: [],
+      commits: [],
+      hasMore: false,
+      selectedCommit: null,
+      commitDiff: null,
+      selectedCommitFile: null,
+      selectedParent: 0,
+    });
+
+    // Load status for new active repo
+    await get().refreshStatus(repoId);
+  },
+
+  getActiveRepo: () => {
+    const { repos, activeRepoId } = get();
+    return repos.find(r => r.repoId === activeRepoId) || null;
+  },
+
   updateHeadInfo: async (repoId: string) => {
-    const { repo } = get();
-    if (!repo || repo.repoId !== repoId) return;
+    const { repos } = get();
+    const repo = repos.find(r => r.repoId === repoId);
+    if (!repo) return;
 
     try {
       const response = await api.getHeadInfo(repoId);
       if (response.ok && response.data) {
         // Update just the head info in the repo object
         set({
-          repo: {
-            ...repo,
-            head: response.data,
-          },
+          repos: repos.map(r =>
+            r.repoId === repoId ? { ...r, head: response.data || null } : r
+          ),
         });
       }
     } catch (error) {
@@ -405,10 +455,11 @@ export const useStore = create<AppStore>((set, get) => ({
   },
 
   setSelectedParent: async (parent: number) => {
-    const { repo, selectedCommit } = get();
-    if (!repo || !selectedCommit) return;
+    const activeRepo = get().getActiveRepo();
+    const { selectedCommit } = get();
+    if (!activeRepo || !selectedCommit) return;
 
-    await get().selectCommit(repo.repoId, selectedCommit, parent);
+    await get().selectCommit(activeRepo.repoId, selectedCommit, parent);
   },
 
   clearHistory: () => {

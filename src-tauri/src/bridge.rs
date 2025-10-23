@@ -51,6 +51,12 @@ pub fn close_repo(repo_id: String, state: State<AppState>) -> ApiResponse<()> {
     }
 }
 
+#[tauri::command]
+pub fn list_repos(state: State<AppState>) -> ApiResponse<Vec<RepoOpenResponse>> {
+    let repos = state.repo_registry.list_repos();
+    ApiResponse::success(repos)
+}
+
 // ============================================================================
 // Status Commands
 // ============================================================================

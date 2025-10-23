@@ -5,7 +5,8 @@ import { api } from '../lib/api';
 import { toast } from 'sonner';
 
 export function StagePanel() {
-  const repo = useStore((s) => s.repo);
+  const getActiveRepo = useStore((s) => s.getActiveRepo);
+  const repo = getActiveRepo();
   const allEntries = useStore((s) => s.entries);
   const setIsOperating = useStore((s) => s.setIsOperating);
   const refreshStatus = useStore((s) => s.refreshStatus);
