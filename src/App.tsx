@@ -311,18 +311,22 @@ function App() {
           <PanelResizeHandle className="w-1 bg-gray-200 dark:bg-gray-700 hover:bg-blue-500 transition-colors" />
 
           {/* Middle Panel - Diff Viewer */}
-          <Panel defaultSize={50} minSize={30}>
+          <Panel defaultSize={showHistory ? 75 : 50} minSize={30}>
             <div className="h-full flex flex-col overflow-hidden">
               <DiffPanel />
             </div>
           </Panel>
 
-          <PanelResizeHandle className="w-1 bg-gray-200 dark:bg-gray-700 hover:bg-blue-500 transition-colors" />
+          {!showHistory && (
+            <>
+              <PanelResizeHandle className="w-1 bg-gray-200 dark:bg-gray-700 hover:bg-blue-500 transition-colors" />
 
-          {/* Right Panel - Staged + Commit */}
-          <Panel defaultSize={25} minSize={20}>
-            <StagePanel />
-          </Panel>
+              {/* Right Panel - Staged + Commit */}
+              <Panel defaultSize={25} minSize={20}>
+                <StagePanel />
+              </Panel>
+            </>
+          )}
         </PanelGroup>
       </div>
 
