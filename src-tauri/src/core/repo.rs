@@ -31,6 +31,20 @@ impl RepoRegistry {
     pub fn open_repo(&self, path: &str) -> Result<RepoOpenResponse> {
         let repo_path = Path::new(path);
 
+        // Check if this repository path is already open
+        {
+            let repos = self.repos.read().unwrap();
+            if let Some(existing) = repos.values().find(|m| m.path == path) {
+                // Repository already open, return existing entry with updated HEAD info
+                let head_info = Self::get_head_info(&existing.repo)?;
+                return Ok(RepoOpenResponse {
+                    repo_id: existing.repo_id.clone(),
+                    path: existing.path.clone(),
+                    head: Some(head_info),
+                });
+            }
+        }
+
         // Open the repository using libgit2
         let repo = Repository::open(repo_path)
             .with_context(|| format!("Failed to open repository at {}", path))?;
@@ -346,5 +360,23 @@ mod tests {
         // List should be empty
         let repos = registry.list_repos();
         assert_eq!(repos.len(), 0);
+    }
+
+    #[test]
+    fn test_open_same_repo_twice_returns_same_id() {
+        let (_temp_dir, repo_path) = create_test_repo();
+        let registry = RepoRegistry::new();
+
+        // Open the same repo twice without closing
+        let response1 = registry.open_repo(&repo_path).unwrap();
+        let response2 = registry.open_repo(&repo_path).unwrap();
+
+        // Should return the same repo_id to prevent duplicates
+        assert_eq!(response1.repo_id, response2.repo_id);
+        assert_eq!(response1.path, response2.path);
+
+        // List should only contain one repo
+        let repos = registry.list_repos();
+        assert_eq!(repos.len(), 1);
     }
 }

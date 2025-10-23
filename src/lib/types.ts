@@ -257,3 +257,10 @@ export interface CommitFileMatch {
   commit: CommitSummary;
   change: CommitFileChangeType;
 }
+
+// Persistence Types
+export interface ValidatedRepo {
+  path: string;
+  exists: boolean;
+  isGitRepo: boolean;
+}

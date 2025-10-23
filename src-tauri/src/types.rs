@@ -385,6 +385,18 @@ pub struct CommitFileMatch {
 }
 
 // ============================================================================
+// Persistence Operations
+// ============================================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ValidatedRepo {
+    pub path: String,
+    pub exists: bool,
+    pub is_git_repo: bool,
+}
+
+// ============================================================================
 // Internal Cache Types
 // ============================================================================
 

@@ -1,6 +1,5 @@
 # New Features Ideas
 
-* Handling multiple projects
 * **Diff Search:** Find text within diff
 
 * Search file in commit history :

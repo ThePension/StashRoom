@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { api } from '../lib/api';
 import { toast } from 'sonner';
+import { saveWorkspace, saveSettings, loadWorkspace, loadSettings } from '../lib/persistence';
 import type {
   RepoOpenResponse,
   StatusEntry,
@@ -15,11 +16,16 @@ interface RepoState {
   activeRepoId: string | null;
   isLoading: boolean;
   error: string | null;
-  openRepo: (path: string) => Promise<void>;
+  openRepo: (path: string, skipPersist?: boolean) => Promise<void>;
+  /**
+   * Closes a repository. Prevents closing the last repository to avoid empty UI state.
+   * Shows an error toast if attempting to close the last repo.
+   */
   closeRepo: (repoId: string) => Promise<void>;
-  setActiveRepo: (repoId: string) => Promise<void>;
+  setActiveRepo: (repoId: string, skipPersist?: boolean) => Promise<void>;
   getActiveRepo: () => RepoOpenResponse | null;
   updateHeadInfo: (repoId: string) => Promise<void>;
+  restoreFromPersistence: () => Promise<void>;
 }
 
 interface StatusState {
@@ -92,6 +98,19 @@ export interface AppStore
     SettingsState,
     HistoryState {}
 
+// Helper function to persist workspace state
+const persistWorkspace = (repos: RepoOpenResponse[], activeRepoId: string | null) => {
+  const activeRepo = repos.find(r => r.repoId === activeRepoId);
+  saveWorkspace({
+    version: 1,
+    repos: repos.map(r => ({
+      path: r.path,
+      lastOpened: Date.now(),
+    })),
+    activeRepoPath: activeRepo?.path || null,
+  });
+};
+
 export const useStore = create<AppStore>((set, get) => ({
   // Repo state
   repos: [],
@@ -99,7 +118,7 @@ export const useStore = create<AppStore>((set, get) => ({
   isLoading: false,
   error: null,
 
-  openRepo: async (path: string) => {
+  openRepo: async (path: string, skipPersist: boolean = false) => {
     set({ isLoading: true, error: null });
     try {
       // Check if repo is already open
@@ -109,14 +128,30 @@ export const useStore = create<AppStore>((set, get) => ({
       if (existingRepo) {
         // Repo already open, just switch to it
         set({ isLoading: false });
-        await get().setActiveRepo(existingRepo.repoId);
-        toast.success(`Switched to repository: ${path}`);
+        await get().setActiveRepo(existingRepo.repoId, skipPersist);
+        if (!skipPersist) {
+          toast.success(`Switched to repository: ${path}`);
+        }
         return;
       }
 
       const response = await api.openRepo({ path });
       if (response.ok && response.data) {
         const newRepo = response.data;
+
+        // Check if repo with this ID already exists (can happen in React Strict Mode)
+        const currentRepos = get().repos;
+        const existingById = currentRepos.find(r => r.repoId === newRepo.repoId);
+
+        if (existingById) {
+          // Repo already exists with same ID, just switch to it
+          set({ isLoading: false });
+          await get().setActiveRepo(existingById.repoId, skipPersist);
+          if (!skipPersist) {
+            toast.success(`Switched to repository: ${path}`);
+          }
+          return;
+        }
 
         // Add repo to list and make it active
         set((state) => ({
@@ -146,7 +181,11 @@ export const useStore = create<AppStore>((set, get) => ({
         // Subscribe to watch events
         await api.subscribeWatch(newRepo.repoId);
 
-        toast.success(`Opened repository: ${path}`);
+        // Persist workspace state (skip during restoration to avoid duplicates)
+        if (!skipPersist) {
+          persistWorkspace(get().repos, newRepo.repoId);
+          toast.success(`Opened repository: ${path}`);
+        }
       } else {
         set({ error: response.message || 'Failed to open repository', isLoading: false });
         toast.error(response.message || 'Failed to open repository');
@@ -160,6 +199,13 @@ export const useStore = create<AppStore>((set, get) => ({
 
   closeRepo: async (repoId: string) => {
     const { repos, activeRepoId } = get();
+
+    // Prevent closing the last repo
+    if (repos.length <= 1) {
+      toast.error('Cannot close the last repository');
+      return;
+    }
+
     const repoToClose = repos.find(r => r.repoId === repoId);
 
     if (repoToClose) {
@@ -192,13 +238,18 @@ export const useStore = create<AppStore>((set, get) => ({
         if (newActiveRepo) {
           await get().refreshStatus(newActiveRepo.repoId);
         }
+
+        // Persist workspace state
+        persistWorkspace(updatedRepos, newActiveRepo?.repoId || null);
       } else {
         set({ repos: updatedRepos });
+        // Persist workspace state
+        persistWorkspace(updatedRepos, activeRepoId);
       }
     }
   },
 
-  setActiveRepo: async (repoId: string) => {
+  setActiveRepo: async (repoId: string, skipPersist: boolean = false) => {
     const { activeRepoId } = get();
     if (activeRepoId === repoId) return;
 
@@ -222,6 +273,11 @@ export const useStore = create<AppStore>((set, get) => ({
 
     // Load status for new active repo
     await get().refreshStatus(repoId);
+
+    // Persist workspace state (skip during restoration)
+    if (!skipPersist) {
+      persistWorkspace(get().repos, repoId);
+    }
   },
 
   getActiveRepo: () => {
@@ -246,6 +302,102 @@ export const useStore = create<AppStore>((set, get) => ({
       }
     } catch (error) {
       console.error('Failed to update HEAD info:', error);
+    }
+  },
+
+  restoreFromPersistence: async () => {
+    try {
+      console.log('Starting restoration from persistence...');
+
+      // Load workspace state
+      const workspace = await loadWorkspace();
+      console.log('Loaded workspace:', workspace);
+
+      if (!workspace || !workspace.repos || workspace.repos.length === 0) {
+        console.log('No workspace data to restore');
+        // Still load settings even if no repos
+        const settings = await loadSettings();
+        if (settings) {
+          console.log('Loaded settings:', settings);
+          set({
+            settings: {
+              showLineNumbers: settings.showLineNumbers,
+              theme: settings.theme,
+              contextLines: settings.contextLines,
+              compactMode: settings.compactMode,
+            },
+          });
+        }
+        return;
+      }
+
+      // Validate repo paths (deduplicate first to avoid opening same repo multiple times)
+      const paths = [...new Set(workspace.repos.map(r => r.path))];
+      console.log('Validating repo paths:', paths);
+
+      const validationResponse = await api.validateRepoPaths(paths);
+
+      if (!validationResponse.ok || !validationResponse.data) {
+        console.error('Failed to validate repo paths:', validationResponse);
+        return;
+      }
+
+      const validatedRepos = validationResponse.data;
+      console.log('Validated repos:', validatedRepos);
+
+      const validPaths = validatedRepos
+        .filter(v => v.exists && v.isGitRepo)
+        .map(v => v.path);
+
+      // Show toast for missing repos
+      const missingRepos = validatedRepos.filter(v => !v.exists || !v.isGitRepo);
+      if (missingRepos.length > 0) {
+        toast.error(`${missingRepos.length} repository(ies) are missing or invalid`);
+      }
+
+      // Open valid repos (skip persistence during restoration)
+      for (const path of validPaths) {
+        try {
+          console.log('Restoring repo:', path);
+          await get().openRepo(path, true); // skipPersist = true
+        } catch (error) {
+          console.error(`Failed to restore repo ${path}:`, error);
+        }
+      }
+
+      // Set active repo if it was restored
+      if (workspace.activeRepoPath && validPaths.includes(workspace.activeRepoPath)) {
+        const { repos } = get();
+        const activeRepo = repos.find(r => r.path === workspace.activeRepoPath);
+        if (activeRepo) {
+          console.log('Setting active repo:', activeRepo.path);
+          await get().setActiveRepo(activeRepo.repoId, true); // skipPersist = true
+        }
+      }
+
+      // Restoration complete - the existing workspace.json is already correct
+
+      // Load settings
+      const settings = await loadSettings();
+      if (settings) {
+        console.log('Loaded settings:', settings);
+        set({
+          settings: {
+            showLineNumbers: settings.showLineNumbers,
+            theme: settings.theme,
+            contextLines: settings.contextLines,
+            compactMode: settings.compactMode,
+          },
+        });
+      }
+
+      console.log('Restoration complete');
+    } catch (error) {
+      console.error('Failed to restore from persistence:', error);
+      // Don't show error toast on first load - might just be no data yet
+      if (error instanceof Error && !error.message.includes('not found')) {
+        toast.error('Failed to restore previous session');
+      }
     }
   },
 
@@ -368,6 +520,16 @@ export const useStore = create<AppStore>((set, get) => ({
         ...newSettings,
       },
     }));
+
+    // Persist settings
+    const { settings } = get();
+    saveSettings({
+      version: 1,
+      theme: settings.theme,
+      showLineNumbers: settings.showLineNumbers,
+      contextLines: settings.contextLines,
+      compactMode: settings.compactMode,
+    });
   },
 
   // History state

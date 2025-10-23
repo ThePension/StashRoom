@@ -11,6 +11,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_os::init())
+        .plugin(tauri_plugin_store::Builder::new().build())
         .manage(AppState::new())
         .invoke_handler(tauri::generate_handler![
             bridge::open_repo,
@@ -35,6 +36,7 @@ pub fn run() {
             bridge::search_files,
             bridge::list_backups,
             bridge::restore_from_backup,
+            bridge::validate_repo_paths,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

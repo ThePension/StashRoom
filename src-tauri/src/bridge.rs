@@ -607,3 +607,206 @@ pub fn restore_from_backup(
         Err(e) => ApiResponse::error("RESTORE_ERROR".to_string(), e.to_string()),
     }
 }
+
+// ============================================================================
+// Persistence Commands
+// ============================================================================
+
+#[tauri::command]
+pub fn validate_repo_paths(paths: Vec<String>) -> ApiResponse<Vec<ValidatedRepo>> {
+    let validated: Vec<ValidatedRepo> = paths
+        .into_iter()
+        .map(|path| {
+            let path_buf = std::path::PathBuf::from(&path);
+            let exists = path_buf.exists();
+            let is_git_repo = exists && path_buf.join(".git").exists();
+
+            ValidatedRepo {
+                path,
+                exists,
+                is_git_repo,
+            }
+        })
+        .collect();
+
+    ApiResponse::success(validated)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use git2::Repository;
+    use tempfile::TempDir;
+
+    fn create_test_repo() -> (TempDir, String) {
+        let temp_dir = TempDir::new().unwrap();
+        let repo_path = temp_dir.path().to_string_lossy().to_string();
+
+        let repo = Repository::init(&repo_path).unwrap();
+        let sig = git2::Signature::now("Test User", "test@example.com").unwrap();
+
+        // Create initial commit
+        let tree_id = {
+            let mut index = repo.index().unwrap();
+            index.write_tree().unwrap()
+        };
+        let tree = repo.find_tree(tree_id).unwrap();
+        repo.commit(Some("HEAD"), &sig, &sig, "Initial commit", &tree, &[])
+            .unwrap();
+
+        (temp_dir, repo_path)
+    }
+
+    #[test]
+    fn test_validate_repo_paths_all_valid() {
+        let (_temp_dir1, path1) = create_test_repo();
+        let (_temp_dir2, path2) = create_test_repo();
+
+        let paths = vec![path1.clone(), path2.clone()];
+        let response = validate_repo_paths(paths);
+
+        assert!(response.ok);
+        let validated = response.data.unwrap();
+        assert_eq!(validated.len(), 2);
+
+        assert_eq!(validated[0].path, path1);
+        assert!(validated[0].exists);
+        assert!(validated[0].is_git_repo);
+
+        assert_eq!(validated[1].path, path2);
+        assert!(validated[1].exists);
+        assert!(validated[1].is_git_repo);
+    }
+
+    #[test]
+    fn test_validate_repo_paths_missing_paths() {
+        let response = validate_repo_paths(vec![
+            "/path/that/does/not/exist".to_string(),
+            "/another/missing/path".to_string(),
+        ]);
+
+        assert!(response.ok);
+        let validated = response.data.unwrap();
+        assert_eq!(validated.len(), 2);
+
+        assert_eq!(validated[0].path, "/path/that/does/not/exist");
+        assert!(!validated[0].exists);
+        assert!(!validated[0].is_git_repo);
+
+        assert_eq!(validated[1].path, "/another/missing/path");
+        assert!(!validated[1].exists);
+        assert!(!validated[1].is_git_repo);
+    }
+
+    #[test]
+    fn test_validate_repo_paths_mixed_valid_and_invalid() {
+        let (_temp_dir, valid_path) = create_test_repo();
+
+        let paths = vec![
+            valid_path.clone(),
+            "/missing/path".to_string(),
+        ];
+        let response = validate_repo_paths(paths);
+
+        assert!(response.ok);
+        let validated = response.data.unwrap();
+        assert_eq!(validated.len(), 2);
+
+        // First one should be valid
+        assert_eq!(validated[0].path, valid_path);
+        assert!(validated[0].exists);
+        assert!(validated[0].is_git_repo);
+
+        // Second one should be invalid
+        assert_eq!(validated[1].path, "/missing/path");
+        assert!(!validated[1].exists);
+        assert!(!validated[1].is_git_repo);
+    }
+
+    #[test]
+    fn test_validate_repo_paths_non_git_directory() {
+        // Create a regular directory (not a git repo)
+        let temp_dir = TempDir::new().unwrap();
+        let non_git_path = temp_dir.path().to_string_lossy().to_string();
+
+        let response = validate_repo_paths(vec![non_git_path.clone()]);
+
+        assert!(response.ok);
+        let validated = response.data.unwrap();
+        assert_eq!(validated.len(), 1);
+
+        // Directory exists but is not a git repo
+        assert_eq!(validated[0].path, non_git_path);
+        assert!(validated[0].exists);
+        assert!(!validated[0].is_git_repo);
+    }
+
+    #[test]
+    fn test_validate_repo_paths_empty_list() {
+        let response = validate_repo_paths(vec![]);
+
+        assert!(response.ok);
+        let validated = response.data.unwrap();
+        assert_eq!(validated.len(), 0);
+    }
+
+    #[test]
+    fn test_validate_repo_paths_with_duplicates() {
+        let (_temp_dir, path) = create_test_repo();
+
+        // Pass the same path multiple times
+        let paths = vec![path.clone(), path.clone(), path.clone()];
+        let response = validate_repo_paths(paths);
+
+        assert!(response.ok);
+        let validated = response.data.unwrap();
+        assert_eq!(validated.len(), 3);
+
+        // All three should be valid and identical
+        for v in &validated {
+            assert_eq!(v.path, path);
+            assert!(v.exists);
+            assert!(v.is_git_repo);
+        }
+    }
+
+    #[test]
+    fn test_validate_repo_paths_preserves_order() {
+        let (_temp_dir1, path1) = create_test_repo();
+        let (_temp_dir2, path2) = create_test_repo();
+        let missing_path = "/missing/path".to_string();
+
+        let paths = vec![path1.clone(), missing_path.clone(), path2.clone()];
+        let response = validate_repo_paths(paths);
+
+        assert!(response.ok);
+        let validated = response.data.unwrap();
+        assert_eq!(validated.len(), 3);
+
+        // Order should be preserved
+        assert_eq!(validated[0].path, path1);
+        assert_eq!(validated[1].path, missing_path);
+        assert_eq!(validated[2].path, path2);
+    }
+
+    #[test]
+    fn test_validate_repo_paths_handles_special_characters() {
+        // Test with paths containing spaces and special characters
+        let temp_dir = TempDir::new().unwrap();
+        let base_path = temp_dir.path();
+
+        // Create a directory with spaces (but not a git repo)
+        let special_dir = base_path.join("my repo with spaces");
+        std::fs::create_dir(&special_dir).unwrap();
+
+        let special_path = special_dir.to_string_lossy().to_string();
+        let response = validate_repo_paths(vec![special_path.clone()]);
+
+        assert!(response.ok);
+        let validated = response.data.unwrap();
+        assert_eq!(validated.len(), 1);
+        assert_eq!(validated[0].path, special_path);
+        assert!(validated[0].exists);
+        assert!(!validated[0].is_git_repo); // Directory exists but is not a git repo
+    }
+}

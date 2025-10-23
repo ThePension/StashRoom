@@ -19,6 +19,7 @@ function App() {
   const isLoading = useStore((s) => s.isLoading);
   const isOperating = useStore((s) => s.isOperating);
   const openRepo = useStore((s) => s.openRepo);
+  const restoreFromPersistence = useStore((s) => s.restoreFromPersistence);
   const theme = useStore((s) => s.settings.theme);
   const compactMode = useStore((s) => s.settings.compactMode);
   const [showHistory, setShowHistory] = useState(false);
@@ -55,6 +56,11 @@ function App() {
       return () => mediaQuery.removeEventListener('change', handler);
     }
   }, [theme]);
+
+  // Restore from persistence on mount
+  useEffect(() => {
+    restoreFromPersistence();
+  }, []);
 
   // Global keyboard shortcuts
   useEffect(() => {

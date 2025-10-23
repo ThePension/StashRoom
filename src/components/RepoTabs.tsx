@@ -9,6 +9,8 @@ export function RepoTabs() {
 
   if (repos.length === 0) return null;
 
+  const isLastRepo = repos.length === 1;
+
   return (
     <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-2 overflow-x-auto">
       {repos.map((repo) => {
@@ -42,16 +44,18 @@ export function RepoTabs() {
                 ({repo.head.branch})
               </span>
             )}
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                closeRepo(repo.repoId);
-              }}
-              className="p-0.5 rounded hover:bg-gray-200 dark:hover:bg-gray-600 opacity-0 group-hover:opacity-100 transition-opacity"
-              title="Close repository"
-            >
-              <X className="w-3 h-3" />
-            </button>
+            {!isLastRepo && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  closeRepo(repo.repoId);
+                }}
+                className="p-0.5 rounded hover:bg-gray-200 dark:hover:bg-gray-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                title="Close repository"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            )}
           </div>
         );
       })}

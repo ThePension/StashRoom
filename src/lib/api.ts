@@ -23,6 +23,7 @@ import type {
   SwitchBranchResponse,
   SearchFilesRequest,
   SearchFilesResponse,
+  ValidatedRepo,
 } from './types';
 
 class GitAPI {
@@ -195,6 +196,13 @@ class GitAPI {
    */
   async searchFiles(request: SearchFilesRequest): Promise<ApiResponse<SearchFilesResponse>> {
     return invoke<ApiResponse<SearchFilesResponse>>('search_files', { request });
+  }
+
+  /**
+   * Validates that repository paths exist and are valid git repos
+   */
+  async validateRepoPaths(paths: string[]): Promise<ApiResponse<ValidatedRepo[]>> {
+    return invoke<ApiResponse<ValidatedRepo[]>>('validate_repo_paths', { paths });
   }
 }
 
