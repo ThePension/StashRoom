@@ -42,9 +42,22 @@ See [QUICKSTART.md](./QUICKSTART.md) for detailed instructions.
 
 ### Main Interface
 
+#### Prepare your commits
+
 ![Main screenshot](./public/screenshot1.png)
 
+#### Explore commits history
+
 ![Main screenshot with commits history](./public/screenshot2.png)
+
+#### Restore a backup of a discarded file
+
+![Main screenshot with discards backups](./public/screenshot3.png)
+
+#### Search for file through commits history
+
+![Search file](./public/screenshot4.png)
+
 
 ## Tech Stack
 

@@ -15,6 +15,8 @@
 * Update a commit ?
 * Remove specific file from history ?
 
+* Secrets & Large Files Guard (pre-commit, fast)
+
 * In the settings :
     * Add a toggle to activate the discard backup
 
@@ -23,7 +25,9 @@
     * Expend search also in the current staging context
 
 * Select multiple files on the left panel, and stage them all
-    * Discard a directory with the tree view
+
+* Create a new branch
+    * And select from which branch
 
 Commit Stack View (local) :
 * Manage a stack of local commits (like mini PRs): reword/reorder/squash with preview, and a safety “dry-run rebase” check that reports conflicts ahead of time.
