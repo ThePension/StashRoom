@@ -1,10 +1,13 @@
-import { useEffect, useRef, useMemo } from 'react';
+import { useEffect, useRef, useMemo, useState } from 'react';
 import { Virtuoso } from 'react-virtuoso';
+import { ChevronRight, ChevronDown, Folder, File } from 'lucide-react';
 import { useStore } from '../state/store';
 import { api } from '../lib/api';
 import { toast } from 'sonner';
 import { useConfirm } from '../hooks/useConfirm';
+import { buildTree, flattenTree, getFilesInFolder } from '../lib/treeUtils';
 import type { StatusEntry } from '../lib/types';
+import type { FlatTreeNode } from '../lib/treeUtils';
 
 interface ChangeListProps {
   type: 'unstaged' | 'staged';
@@ -20,7 +23,12 @@ export function ChangeList({ type }: ChangeListProps) {
   const selectCommitFile = useStore((s) => s.selectCommitFile);
   const setIsOperating = useStore((s) => s.setIsOperating);
   const compactMode = useStore((s) => s.settings.compactMode);
+  const treeViewMode = useStore((s) => s.settings.treeViewMode);
   const { confirm, ConfirmDialog } = useConfirm();
+
+  // Tree view state
+  const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
+  const [selectedTreeIndex, setSelectedTreeIndex] = useState<number>(0);
 
   // Filter entries based on type (memoized to prevent infinite loops)
   const entries = useMemo(() => {
@@ -28,6 +36,21 @@ export function ChangeList({ type }: ChangeListProps) {
       ? allEntries.filter((e) => e.unstagedStatus !== null || e.untracked)
       : allEntries.filter((e) => e.stagedStatus !== null);
   }, [allEntries, type]);
+
+  // Build tree structure
+  const treeRoot = useMemo(() => {
+    if (treeViewMode === 'flat') return null;
+    return buildTree(entries);
+  }, [entries, treeViewMode]);
+
+  // Flatten tree for virtualization
+  const flattenedTree = useMemo(() => {
+    if (!treeRoot) return [];
+    return flattenTree(treeRoot, expandedPaths);
+  }, [treeRoot, expandedPaths]);
+
+  // Determine which list to use
+  const itemsList = treeViewMode === 'tree' ? flattenedTree : entries;
 
   const virtuosoRef = useRef<any>(null);
   const selectedIndex = useMemo(
@@ -67,54 +90,116 @@ export function ChangeList({ type }: ChangeListProps) {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!entries.length || !document.activeElement?.closest('.change-list')) return;
 
-      switch (e.key) {
-        case 'ArrowDown':
-          e.preventDefault();
-          if (selectedIndex < entries.length - 1) {
-            const nextEntry = entries[selectedIndex + 1];
-            setSelectedPath(nextEntry.path);
-            virtuosoRef.current?.scrollToIndex({ index: selectedIndex + 1, behavior: 'smooth' });
-          }
-          break;
+      if (treeViewMode === 'tree') {
+        // Tree mode navigation
+        switch (e.key) {
+          case 'ArrowDown':
+            e.preventDefault();
+            if (selectedTreeIndex < flattenedTree.length - 1) {
+              const newIndex = selectedTreeIndex + 1;
+              setSelectedTreeIndex(newIndex);
+              const nextNode = flattenedTree[newIndex];
+              if (nextNode.type === 'file') {
+                setSelectedPath(nextNode.path);
+              }
+              virtuosoRef.current?.scrollToIndex({ index: newIndex, behavior: 'smooth' });
+            }
+            break;
 
-        case 'ArrowUp':
-          e.preventDefault();
-          if (selectedIndex > 0) {
-            const prevEntry = entries[selectedIndex - 1];
-            setSelectedPath(prevEntry.path);
-            virtuosoRef.current?.scrollToIndex({ index: selectedIndex - 1, behavior: 'smooth' });
-          }
-          break;
+          case 'ArrowUp':
+            e.preventDefault();
+            if (selectedTreeIndex > 0) {
+              const newIndex = selectedTreeIndex - 1;
+              setSelectedTreeIndex(newIndex);
+              const prevNode = flattenedTree[newIndex];
+              if (prevNode.type === 'file') {
+                setSelectedPath(prevNode.path);
+              }
+              virtuosoRef.current?.scrollToIndex({ index: newIndex, behavior: 'smooth' });
+            }
+            break;
 
-        case 'Enter':
-          e.preventDefault();
-          if (selectedPath && repo) {
-            loadDiff(repo.repoId, selectedPath, type === 'unstaged' ? 'working' : 'index');
-          }
-          break;
+          case 'Enter':
+            e.preventDefault();
+            const currentNode = flattenedTree[selectedTreeIndex];
+            if (currentNode.type === 'folder') {
+              toggleFolder(currentNode.path);
+            } else if (currentNode.type === 'file' && repo) {
+              loadDiff(repo.repoId, currentNode.path, type === 'unstaged' ? 'working' : 'index');
+            }
+            break;
 
-        case 's':
-        case 'S':
-          e.preventDefault();
-          if (selectedPath && repo) {
-            handleStageToggle(entries[selectedIndex]);
-          }
-          break;
+          case 's':
+          case 'S':
+            e.preventDefault();
+            const nodeForStage = flattenedTree[selectedTreeIndex];
+            if (nodeForStage.type === 'file' && repo) {
+              handleStageToggle(nodeForStage.entry!);
+            }
+            break;
 
-        case 'd':
-        case 'D':
-          e.preventDefault();
-          if (selectedPath && repo && type === 'unstaged') {
-            const entry = entries[selectedIndex];
-            entry.untracked ? confirmAndDelete(entry) : confirmAndDiscard(entry);
-          }
-          break;
+          case 'd':
+          case 'D':
+            e.preventDefault();
+            const nodeForDiscard = flattenedTree[selectedTreeIndex];
+            if (nodeForDiscard.type === 'file' && type === 'unstaged' && repo) {
+              nodeForDiscard.entry!.untracked
+                ? confirmAndDelete(nodeForDiscard.entry!)
+                : confirmAndDiscard(nodeForDiscard.entry!);
+            }
+            break;
+        }
+      } else {
+        // Flat mode navigation (original)
+        switch (e.key) {
+          case 'ArrowDown':
+            e.preventDefault();
+            if (selectedIndex < entries.length - 1) {
+              const nextEntry = entries[selectedIndex + 1];
+              setSelectedPath(nextEntry.path);
+              virtuosoRef.current?.scrollToIndex({ index: selectedIndex + 1, behavior: 'smooth' });
+            }
+            break;
+
+          case 'ArrowUp':
+            e.preventDefault();
+            if (selectedIndex > 0) {
+              const prevEntry = entries[selectedIndex - 1];
+              setSelectedPath(prevEntry.path);
+              virtuosoRef.current?.scrollToIndex({ index: selectedIndex - 1, behavior: 'smooth' });
+            }
+            break;
+
+          case 'Enter':
+            e.preventDefault();
+            if (selectedPath && repo) {
+              loadDiff(repo.repoId, selectedPath, type === 'unstaged' ? 'working' : 'index');
+            }
+            break;
+
+          case 's':
+          case 'S':
+            e.preventDefault();
+            if (selectedPath && repo) {
+              handleStageToggle(entries[selectedIndex]);
+            }
+            break;
+
+          case 'd':
+          case 'D':
+            e.preventDefault();
+            if (selectedPath && repo && type === 'unstaged') {
+              const entry = entries[selectedIndex];
+              entry.untracked ? confirmAndDelete(entry) : confirmAndDiscard(entry);
+            }
+            break;
+        }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [entries, selectedIndex, selectedPath, repo, type]);
+  }, [entries, selectedIndex, selectedPath, repo, type, treeViewMode, flattenedTree, selectedTreeIndex]);
 
   const handleSelect = (entry: StatusEntry) => {
     // Clear commit file selection when switching to working tree changes
@@ -288,6 +373,18 @@ export function ChangeList({ type }: ChangeListProps) {
     }
   };
 
+  const toggleFolder = (folderPath: string) => {
+    setExpandedPaths((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(folderPath)) {
+        newSet.delete(folderPath);
+      } else {
+        newSet.add(folderPath);
+      }
+      return newSet;
+    });
+  };
+
   const getStatusIcon = (entry: StatusEntry) => {
     if (entry.untracked) return <span className="text-green-500">+</span>;
     if (type === 'unstaged' && entry.unstagedStatus === 'deleted')
@@ -314,13 +411,110 @@ export function ChangeList({ type }: ChangeListProps) {
   return (
     <>
       <ConfirmDialog />
-      <div className="h-full change-list bg-white dark:bg-gray-900" tabIndex={0}>
+      <div className="h-full change-list bg-white dark:bg-gray-900 overflow-x-auto" tabIndex={0}>
         <Virtuoso
         ref={virtuosoRef}
-        style={{ height: '100%' }}
-        totalCount={entries.length}
+        style={{ height: '100%', minWidth: 'max-content' }}
+        totalCount={itemsList.length}
         itemContent={(index) => {
-          const entry = entries[index];
+          const item = itemsList[index];
+
+          // Tree mode - could be folder or file
+          if (treeViewMode === 'tree') {
+            const node = item as FlatTreeNode;
+
+            if (node.type === 'folder') {
+              const isExpanded = node.isExpanded ?? false;
+              const stats = node.stats!;
+              const hasChanges = stats.modified + stats.added + stats.deleted > 0;
+
+              return (
+                <div
+                  className={`
+                    ${compactMode ? 'px-2 py-0.5' : 'px-3 py-1.5'} cursor-pointer select-none ${compactMode ? 'text-xs' : 'text-sm'}
+                    text-gray-700 dark:text-gray-300
+                    hover:bg-gray-100 dark:hover:bg-gray-800
+                    group
+                    whitespace-nowrap
+                  `}
+                  style={{ paddingLeft: `${(node.depth + 1) * 16 + 12}px` }}
+                  onClick={() => toggleFolder(node.path)}
+                >
+                  <div className="flex items-center gap-2">
+                    {isExpanded ? (
+                      <ChevronDown className="w-3 h-3 flex-shrink-0" />
+                    ) : (
+                      <ChevronRight className="w-3 h-3 flex-shrink-0" />
+                    )}
+                    <Folder className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
+                    <span className="font-medium">{node.name}</span>
+                    {hasChanges && (
+                      <span className="text-xs text-gray-500 dark:text-gray-400">
+                        ({stats.added > 0 && `+${stats.added} `}
+                        {stats.modified > 0 && `~${stats.modified} `}
+                        {stats.deleted > 0 && `-${stats.deleted}`})
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            } else {
+              // File node
+              const entry = node.entry!;
+              const isSelected = entry.path === selectedPath;
+
+              return (
+                <div
+                  className={`
+                    ${compactMode ? 'px-2 py-0.5' : 'px-3 py-1.5'} cursor-pointer select-none ${compactMode ? 'text-xs' : 'text-sm'} font-mono
+                    text-gray-700 dark:text-gray-300
+                    hover:bg-gray-100 dark:hover:bg-gray-800
+                    ${isSelected ? 'bg-blue-50 dark:bg-blue-900/20 border-l-2 border-blue-500' : ''}
+                    group
+                    whitespace-nowrap
+                  `}
+                  style={{ paddingLeft: `${(node.depth + 1) * 16 + 12}px` }}
+                  onClick={() => handleSelect(entry)}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <File className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                      <span className="w-4 text-center">{getStatusIcon(entry)}</span>
+                      <span>{node.name}</span>
+                    </div>
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleStageToggle(entry);
+                        }}
+                        className="px-2 py-0.5 text-xs rounded bg-blue-500 text-white hover:bg-blue-600 flex-shrink-0"
+                        title={type === 'unstaged' ? 'Stage file' : 'Unstage file'}
+                      >
+                        {type === 'unstaged' ? '→' : '←'}
+                      </button>
+                      {type === 'unstaged' && (
+                        <button
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            entry.untracked ? confirmAndDelete(entry) : confirmAndDiscard(entry);
+                          }}
+                          className="px-2 py-0.5 text-xs rounded bg-red-500 text-white hover:bg-red-600 flex-shrink-0"
+                          title={entry.untracked ? 'Delete file' : 'Discard changes'}
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            }
+          }
+
+          // Flat mode
+          const entry = item as StatusEntry;
           const isSelected = entry.path === selectedPath;
 
           return (
@@ -355,7 +549,6 @@ export function ChangeList({ type }: ChangeListProps) {
                       onClick={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
-                        // Use delete for untracked files, discard for modified files
                         entry.untracked ? confirmAndDelete(entry) : confirmAndDiscard(entry);
                       }}
                       className="px-2 py-0.5 text-xs rounded bg-red-500 text-white hover:bg-red-600 flex-shrink-0"

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { Toaster } from 'sonner';
-import { Settings, FolderOpen, Terminal as TerminalIcon, Archive } from 'lucide-react';
+import { Settings, FolderOpen, Terminal as TerminalIcon, Archive, List, Network } from 'lucide-react';
 import { useStore } from './state/store';
 import { ChangeList } from './components/ChangeList';
 import { DiffPanel } from './components/DiffPanel';
@@ -23,6 +23,8 @@ function App() {
   const restoreFromPersistence = useStore((s) => s.restoreFromPersistence);
   const theme = useStore((s) => s.settings.theme);
   const compactMode = useStore((s) => s.settings.compactMode);
+  const treeViewMode = useStore((s) => s.settings.treeViewMode);
+  const updateSettings = useStore((s) => s.updateSettings);
   const [showHistory, setShowHistory] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showQuickSearch, setShowQuickSearch] = useState(false);
@@ -261,27 +263,57 @@ function App() {
                 <div className="h-full flex flex-col border-r border-gray-200 dark:border-gray-700">
                   {/* Tab Header */}
                   <div className={`${compactMode ? 'px-2 py-1' : 'px-4 py-2'} bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700`}>
-                    <div className={`flex items-center gap-2 ${compactMode ? 'mb-0.5' : 'mb-1'}`}>
-                      <button
-                        onClick={() => setShowHistory(false)}
-                        className={`${compactMode ? 'px-2 py-0.5 text-xs' : 'px-3 py-1 text-sm'} rounded ${
-                          !showHistory
-                            ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 font-semibold'
-                            : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'
-                        }`}
-                      >
-                        Changes
-                      </button>
-                      <button
-                        onClick={() => setShowHistory(true)}
-                        className={`${compactMode ? 'px-2 py-0.5 text-xs' : 'px-3 py-1 text-sm'} rounded ${
-                          showHistory
-                            ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 font-semibold'
-                            : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'
-                        }`}
-                      >
-                        History
-                      </button>
+                    <div className={`flex items-center justify-between ${compactMode ? 'mb-0.5' : 'mb-1'}`}>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setShowHistory(false)}
+                          className={`${compactMode ? 'px-2 py-0.5 text-xs' : 'px-3 py-1 text-sm'} rounded ${
+                            !showHistory
+                              ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 font-semibold'
+                              : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'
+                          }`}
+                        >
+                          Changes
+                        </button>
+                        <button
+                          onClick={() => setShowHistory(true)}
+                          className={`${compactMode ? 'px-2 py-0.5 text-xs' : 'px-3 py-1 text-sm'} rounded ${
+                            showHistory
+                              ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 font-semibold'
+                              : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'
+                          }`}
+                        >
+                          History
+                        </button>
+                      </div>
+
+                      {/* Tree/Flat toggle - only show in Changes mode */}
+                      {!showHistory && (
+                        <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-700 rounded p-0.5">
+                          <button
+                            onClick={() => updateSettings({ treeViewMode: 'flat' })}
+                            className={`${compactMode ? 'p-0.5' : 'p-1'} rounded ${
+                              treeViewMode === 'flat'
+                                ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100'
+                                : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'
+                            }`}
+                            title="Flat view"
+                          >
+                            <List className={compactMode ? 'w-3 h-3' : 'w-3.5 h-3.5'} />
+                          </button>
+                          <button
+                            onClick={() => updateSettings({ treeViewMode: 'tree' })}
+                            className={`${compactMode ? 'p-0.5' : 'p-1'} rounded ${
+                              treeViewMode === 'tree'
+                                ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100'
+                                : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'
+                            }`}
+                            title="Tree view"
+                          >
+                            <Network className={compactMode ? 'w-3 h-3' : 'w-3.5 h-3.5'} />
+                          </button>
+                        </div>
+                      )}
                     </div>
                     {!showHistory ? (
                       <p className={`${compactMode ? 'text-[10px]' : 'text-xs'} text-gray-500 dark:text-gray-400`}>

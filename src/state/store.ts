@@ -65,6 +65,7 @@ interface Settings {
   theme: 'light' | 'dark' | 'system';
   contextLines: number | 'all'; // number of context lines or 'all' for whole file
   compactMode: boolean;
+  treeViewMode: 'flat' | 'tree'; // file list view mode
 }
 
 interface SettingsState {
@@ -325,6 +326,7 @@ export const useStore = create<AppStore>((set, get) => ({
               theme: settings.theme,
               contextLines: settings.contextLines,
               compactMode: settings.compactMode,
+              treeViewMode: settings.treeViewMode ?? 'flat',
             },
           });
         }
@@ -387,6 +389,7 @@ export const useStore = create<AppStore>((set, get) => ({
             theme: settings.theme,
             contextLines: settings.contextLines,
             compactMode: settings.compactMode,
+            treeViewMode: settings.treeViewMode ?? 'flat',
           },
         });
       }
@@ -511,6 +514,7 @@ export const useStore = create<AppStore>((set, get) => ({
     theme: 'system',
     contextLines: 3,
     compactMode: false,
+    treeViewMode: 'flat',
   },
 
   updateSettings: (newSettings: Partial<Settings>) => {
