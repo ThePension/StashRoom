@@ -520,6 +520,7 @@ export const useStore = create<AppStore>((set, get) => ({
       showLineNumbers: settings.showLineNumbers,
       contextLines: settings.contextLines,
       compactMode: settings.compactMode,
+      treeViewMode: settings.treeViewMode,
     });
   },
 
