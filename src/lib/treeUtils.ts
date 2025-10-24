@@ -89,13 +89,24 @@ export function buildTree(entries: StatusEntry[]): TreeNode {
 function updateFolderStats(node: TreeNode, entry: StatusEntry): void {
   if (node.type !== 'folder' || !node.stats) return;
 
-  // Update counts based on file status
-  if (entry.status === 'Modified') {
+  // Count unstaged changes
+  if (entry.unstagedStatus === 'modified') {
     node.stats.modified++;
-  } else if (entry.status === 'Added' || entry.status === 'Untracked') {
+  } else if (entry.untracked) {
     node.stats.added++;
-  } else if (entry.status === 'Deleted') {
+  } else if (entry.unstagedStatus === 'deleted') {
     node.stats.deleted++;
+  }
+
+  // Count staged changes (for files that are only staged, not unstaged)
+  if (entry.stagedStatus !== null && entry.unstagedStatus === null && !entry.untracked) {
+    if (entry.stagedStatus === 'modified') {
+      node.stats.modified++;
+    } else if (entry.stagedStatus === 'added') {
+      node.stats.added++;
+    } else if (entry.stagedStatus === 'deleted') {
+      node.stats.deleted++;
+    }
   }
 
   // Check for staged changes

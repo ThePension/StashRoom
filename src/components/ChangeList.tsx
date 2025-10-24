@@ -21,6 +21,7 @@ export function ChangeList({ type }: ChangeListProps) {
   const setSelectedPath = useStore((s) => s.setSelectedPath);
   const loadDiff = useStore((s) => s.loadDiff);
   const selectCommitFile = useStore((s) => s.selectCommitFile);
+  const isOperating = useStore((s) => s.isOperating);
   const setIsOperating = useStore((s) => s.setIsOperating);
   const compactMode = useStore((s) => s.settings.compactMode);
   const treeViewMode = useStore((s) => s.settings.treeViewMode);
@@ -29,6 +30,7 @@ export function ChangeList({ type }: ChangeListProps) {
   // Tree view state
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
   const [selectedTreeIndex, setSelectedTreeIndex] = useState<number>(0);
+  const [hoveredFolderPath, setHoveredFolderPath] = useState<string | null>(null);
 
   // Filter entries based on type (memoized to prevent infinite loops)
   const entries = useMemo(() => {
@@ -280,6 +282,57 @@ export function ChangeList({ type }: ChangeListProps) {
     }
   };
 
+  const handleStageDir = async (dir: string, includeUntracked: boolean) => {
+    if (!repo) return;
+
+    setIsOperating(true);
+    try {
+      const response = await api.stageDir(repo.repoId, dir, includeUntracked);
+
+      if (response.ok && response.data) {
+        // Update status
+        useStore.getState().updateStatus(response.data);
+
+        const stats = treeRoot?.children?.find(n => n.path === dir)?.stats;
+        const count = stats ? stats.modified + stats.added + stats.deleted : 0;
+
+        toast.success(`Staged ${count} change(s) in ${dir}/`, {
+          duration: 3000,
+        });
+      } else {
+        toast.error(response.message || 'Failed to stage directory');
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unknown error');
+    } finally {
+      setIsOperating(false);
+    }
+  };
+
+  const handleUnstageDir = async (dir: string) => {
+    if (!repo) return;
+
+    setIsOperating(true);
+    try {
+      const response = await api.unstageDir(repo.repoId, dir);
+
+      if (response.ok && response.data) {
+        // Update status
+        useStore.getState().updateStatus(response.data);
+
+        toast.success(`Unstaged changes in ${dir}/`, {
+          duration: 3000,
+        });
+      } else {
+        toast.error(response.message || 'Failed to unstage directory');
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unknown error');
+    } finally {
+      setIsOperating(false);
+    }
+  };
+
   const handleDiscard = async (entry: StatusEntry) => {
     if (!repo) return;
 
@@ -427,6 +480,8 @@ export function ChangeList({ type }: ChangeListProps) {
               const isExpanded = node.isExpanded ?? false;
               const stats = node.stats!;
               const hasChanges = stats.modified + stats.added + stats.deleted > 0;
+              const hasStaged = stats.hasStaged;
+              const isHovered = hoveredFolderPath === node.path;
 
               return (
                 <div
@@ -434,13 +489,14 @@ export function ChangeList({ type }: ChangeListProps) {
                     ${compactMode ? 'px-2 py-0.5' : 'px-3 py-1.5'} cursor-pointer select-none ${compactMode ? 'text-xs' : 'text-sm'}
                     text-gray-700 dark:text-gray-300
                     hover:bg-gray-100 dark:hover:bg-gray-800
-                    group
                     whitespace-nowrap
+                    relative
                   `}
                   style={{ paddingLeft: `${(node.depth + 1) * 16 + 12}px` }}
-                  onClick={() => toggleFolder(node.path)}
+                  onMouseEnter={() => setHoveredFolderPath(node.path)}
+                  onMouseLeave={() => setHoveredFolderPath(null)}
                 >
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-1" onClick={() => toggleFolder(node.path)}>
                     {isExpanded ? (
                       <ChevronDown className="w-3 h-3 flex-shrink-0" />
                     ) : (
@@ -456,6 +512,39 @@ export function ChangeList({ type }: ChangeListProps) {
                       </span>
                     )}
                   </div>
+                  {/* Folder actions - shown on hover */}
+                  {hasChanges && (
+                    <div
+                      className={`absolute right-2 top-1/2 -translate-y-1/2 flex gap-1 z-50 transition-opacity ${isHovered ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+                    >
+                      {type === 'unstaged' && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleStageDir(node.path, true);
+                          }}
+                          disabled={isOperating}
+                          className="px-2 py-0.5 text-xs rounded bg-blue-500 text-white hover:bg-blue-600 flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                          title="Stage directory (including untracked files)"
+                        >
+                          →
+                        </button>
+                      )}
+                      {type === 'staged' && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleUnstageDir(node.path);
+                          }}
+                          disabled={isOperating}
+                          className="px-2 py-0.5 text-xs rounded bg-blue-500 text-white hover:bg-blue-600 flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                          title="Unstage directory"
+                        >
+                          ←
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             } else {

@@ -23,6 +23,8 @@ pub fn run() {
             bridge::stage_lines,
             bridge::stage_file,
             bridge::unstage_file,
+            bridge::stage_dir,
+            bridge::unstage_dir,
             bridge::discard,
             bridge::delete_file,
             bridge::commit,

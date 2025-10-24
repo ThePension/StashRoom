@@ -92,6 +92,20 @@ class GitAPI {
   }
 
   /**
+   * Stages all files in a directory (recursively)
+   */
+  async stageDir(repoId: string, dir: string, includeUntracked: boolean): Promise<ApiResponse<StatusMatrix>> {
+    return invoke<ApiResponse<StatusMatrix>>('stage_dir', { repoId, dir, includeUntracked });
+  }
+
+  /**
+   * Unstages all files in a directory (recursively)
+   */
+  async unstageDir(repoId: string, dir: string): Promise<ApiResponse<StatusMatrix>> {
+    return invoke<ApiResponse<StatusMatrix>>('unstage_dir', { repoId, dir });
+  }
+
+  /**
    * Discards changes to a file or specific hunks
    */
   async discard(request: DiscardRequest): Promise<ApiResponse<DiscardResult>> {

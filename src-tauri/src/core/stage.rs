@@ -351,6 +351,143 @@ pub fn unstage_file(repo: &Repository, path: &str) -> Result<StatusMatrix> {
     crate::core::status::get_status(repo)
 }
 
+/// Stages all files under a directory (recursively)
+pub fn stage_dir(repo: &Repository, dir: &str, include_untracked: bool) -> Result<StatusMatrix> {
+    // Get current status
+    let status_matrix = crate::core::status::get_status(repo)?;
+
+    // Normalize directory path
+    let dir_prefix = if dir.is_empty() || dir == "." {
+        "".to_string()
+    } else {
+        format!("{}/", dir.trim_end_matches('/'))
+    };
+
+    // Get index once
+    let mut index = repo.index().context("Failed to get index")?;
+    let workdir = repo.workdir().context("Repository has no working directory")?;
+
+    let mut staged_count = 0;
+    let mut skipped_count = 0;
+
+    // Iterate through all entries in the status
+    for entry in &status_matrix.entries {
+        // Check if this file is under the specified directory
+        if !entry.path.starts_with(&dir_prefix) && dir_prefix != "" {
+            continue;
+        }
+
+        // Skip untracked files if not requested
+        if entry.untracked && !include_untracked {
+            skipped_count += 1;
+            continue;
+        }
+
+        // Skip if already staged (no unstaged changes and not untracked)
+        if entry.unstaged_status.is_none() && !entry.untracked {
+            skipped_count += 1;
+            continue;
+        }
+
+        // Stage the file
+        let file_path = workdir.join(&entry.path);
+
+        if file_path.exists() && file_path.is_file() {
+            // File exists, add it to the index
+            index
+                .add_path(Path::new(&entry.path))
+                .context(format!("Failed to add file to index: {}", entry.path))?;
+            staged_count += 1;
+        } else {
+            // File doesn't exist (was deleted), remove from index
+            index
+                .remove_path(Path::new(&entry.path))
+                .context(format!("Failed to remove file from index: {}", entry.path))?;
+            staged_count += 1;
+        }
+    }
+
+    // Write index once at the end (atomic operation)
+    index.write().context("Failed to write index")?;
+
+    // Return updated status
+    crate::core::status::get_status(repo)
+}
+
+/// Unstages all files under a directory (recursively)
+pub fn unstage_dir(repo: &Repository, dir: &str) -> Result<StatusMatrix> {
+    // Get current status
+    let status_matrix = crate::core::status::get_status(repo)?;
+
+    // Normalize directory path
+    let dir_prefix = if dir.is_empty() || dir == "." {
+        "".to_string()
+    } else {
+        format!("{}/", dir.trim_end_matches('/'))
+    };
+
+    // Get HEAD tree
+    let head = repo.head().context("Failed to get HEAD")?;
+    let commit = head.peel_to_commit().context("Failed to peel to commit")?;
+    let tree = commit.tree().context("Failed to get tree")?;
+
+    // Get index once
+    let mut index = repo.index().context("Failed to get index")?;
+
+    let mut unstaged_count = 0;
+    let mut skipped_count = 0;
+
+    // Iterate through all entries in the status
+    for entry in &status_matrix.entries {
+        // Check if this file is under the specified directory
+        if !entry.path.starts_with(&dir_prefix) && dir_prefix != "" {
+            continue;
+        }
+
+        // Skip if no staged changes
+        if entry.staged_status.is_none() {
+            skipped_count += 1;
+            continue;
+        }
+
+        // Unstage the file
+        if let Ok(tree_entry) = tree.get_path(Path::new(&entry.path)) {
+            // File exists in HEAD, restore it to index
+            let index_entry = git2::IndexEntry {
+                ctime: git2::IndexTime::new(0, 0),
+                mtime: git2::IndexTime::new(0, 0),
+                dev: 0,
+                ino: 0,
+                mode: tree_entry.filemode() as u32,
+                uid: 0,
+                gid: 0,
+                file_size: 0,
+                id: tree_entry.id(),
+                flags: 0,
+                flags_extended: 0,
+                path: entry.path.as_bytes().to_vec(),
+            };
+
+            index
+                .add(&index_entry)
+                .context(format!("Failed to add entry to index: {}", entry.path))?;
+            unstaged_count += 1;
+        } else {
+            // File doesn't exist in HEAD, remove from index
+            index
+                .remove_path(Path::new(&entry.path))
+                .context(format!("Failed to remove path from index: {}", entry.path))?;
+            unstaged_count += 1;
+        }
+    }
+
+    // Write index once at the end (atomic operation)
+    index.write().context("Failed to write index")?;
+
+    // Return updated status
+    crate::core::status::get_status(repo)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2250,5 +2387,260 @@ mod tests {
         // This test verifies content staging works regardless of mode
         let result = stage_hunk(&repo, "test.txt", 0, false);
         assert!(result.is_ok());
+    }
+
+    // ========================================================================
+    // Directory staging tests
+    // ========================================================================
+
+    #[test]
+    fn test_stage_dir_basic() {
+        let (temp_dir, repo) = create_test_repo();
+
+        // Create directory structure
+        fs::create_dir_all(temp_dir.path().join("src")).unwrap();
+        commit_file(&repo, "src/file1.txt", "content 1", &temp_dir);
+        commit_file(&repo, "src/file2.txt", "content 2", &temp_dir);
+
+        // Modify both files
+        create_file_with_content(&temp_dir, "src/file1.txt", "modified 1");
+        create_file_with_content(&temp_dir, "src/file2.txt", "modified 2");
+
+        // Stage the directory
+        let status = stage_dir(&repo, "src", false).unwrap();
+
+        // Both files should be staged
+        let file1 = status.entries.iter().find(|e| e.path == "src/file1.txt").unwrap();
+        let file2 = status.entries.iter().find(|e| e.path == "src/file2.txt").unwrap();
+
+        assert_eq!(file1.staged_status, Some("modified".to_string()));
+        assert_eq!(file2.staged_status, Some("modified".to_string()));
+    }
+
+    #[test]
+    fn test_stage_dir_nested() {
+        let (temp_dir, repo) = create_test_repo();
+
+        // Create nested directory structure
+        fs::create_dir_all(temp_dir.path().join("src/components")).unwrap();
+        commit_file(&repo, "src/main.txt", "main", &temp_dir);
+        commit_file(&repo, "src/components/comp1.txt", "comp1", &temp_dir);
+        commit_file(&repo, "src/components/comp2.txt", "comp2", &temp_dir);
+
+        // Modify all files
+        create_file_with_content(&temp_dir, "src/main.txt", "main modified");
+        create_file_with_content(&temp_dir, "src/components/comp1.txt", "comp1 modified");
+        create_file_with_content(&temp_dir, "src/components/comp2.txt", "comp2 modified");
+
+        // Stage src directory (should stage all nested files)
+        let status = stage_dir(&repo, "src", false).unwrap();
+
+        // All files should be staged
+        assert!(status.entries.iter().any(|e| e.path == "src/main.txt" && e.staged_status.is_some()));
+        assert!(status.entries.iter().any(|e| e.path == "src/components/comp1.txt" && e.staged_status.is_some()));
+        assert!(status.entries.iter().any(|e| e.path == "src/components/comp2.txt" && e.staged_status.is_some()));
+    }
+
+    #[test]
+    fn test_stage_dir_with_untracked() {
+        let (temp_dir, repo) = create_test_repo();
+
+        // Create directory
+        fs::create_dir_all(temp_dir.path().join("src")).unwrap();
+        commit_file(&repo, "src/tracked.txt", "tracked", &temp_dir);
+
+        // Create untracked file
+        create_file_with_content(&temp_dir, "src/untracked.txt", "untracked");
+
+        // Modify tracked file
+        create_file_with_content(&temp_dir, "src/tracked.txt", "tracked modified");
+
+        // Stage directory without untracked files
+        let status = stage_dir(&repo, "src", false).unwrap();
+
+        // Tracked file should be staged, untracked should not
+        let tracked = status.entries.iter().find(|e| e.path == "src/tracked.txt").unwrap();
+        assert_eq!(tracked.staged_status, Some("modified".to_string()));
+
+        let untracked = status.entries.iter().find(|e| e.path == "src/untracked.txt").unwrap();
+        assert!(untracked.staged_status.is_none());
+        assert!(untracked.untracked);
+
+        // Unstage tracked to reset state
+        unstage_dir(&repo, "src").unwrap();
+
+        // Stage directory WITH untracked files
+        let status = stage_dir(&repo, "src", true).unwrap();
+
+        // Both should be staged now
+        let tracked = status.entries.iter().find(|e| e.path == "src/tracked.txt").unwrap();
+        assert_eq!(tracked.staged_status, Some("modified".to_string()));
+
+        let untracked = status.entries.iter().find(|e| e.path == "src/untracked.txt").unwrap();
+        assert_eq!(untracked.staged_status, Some("added".to_string()));
+    }
+
+    #[test]
+    fn test_stage_dir_with_deletions() {
+        let (temp_dir, repo) = create_test_repo();
+
+        // Create directory structure
+        fs::create_dir_all(temp_dir.path().join("src")).unwrap();
+        commit_file(&repo, "src/file1.txt", "content 1", &temp_dir);
+        commit_file(&repo, "src/file2.txt", "content 2", &temp_dir);
+
+        // Delete one file
+        fs::remove_file(temp_dir.path().join("src/file1.txt")).unwrap();
+
+        // Modify another
+        create_file_with_content(&temp_dir, "src/file2.txt", "modified");
+
+        // Stage directory
+        let status = stage_dir(&repo, "src", false).unwrap();
+
+        // Deleted file should be staged as deleted
+        let file1 = status.entries.iter().find(|e| e.path == "src/file1.txt").unwrap();
+        assert_eq!(file1.staged_status, Some("deleted".to_string()));
+
+        // Modified file should be staged
+        let file2 = status.entries.iter().find(|e| e.path == "src/file2.txt").unwrap();
+        assert_eq!(file2.staged_status, Some("modified".to_string()));
+    }
+
+    #[test]
+    fn test_unstage_dir_basic() {
+        let (temp_dir, repo) = create_test_repo();
+
+        // Create directory structure
+        fs::create_dir_all(temp_dir.path().join("src")).unwrap();
+        commit_file(&repo, "src/file1.txt", "content 1", &temp_dir);
+        commit_file(&repo, "src/file2.txt", "content 2", &temp_dir);
+
+        // Modify and stage both files
+        create_file_with_content(&temp_dir, "src/file1.txt", "modified 1");
+        create_file_with_content(&temp_dir, "src/file2.txt", "modified 2");
+        stage_file(&repo, "src/file1.txt").unwrap();
+        stage_file(&repo, "src/file2.txt").unwrap();
+
+        // Unstage the directory
+        let status = unstage_dir(&repo, "src").unwrap();
+
+        // Both files should be unstaged
+        let file1 = status.entries.iter().find(|e| e.path == "src/file1.txt").unwrap();
+        let file2 = status.entries.iter().find(|e| e.path == "src/file2.txt").unwrap();
+
+        assert!(file1.staged_status.is_none());
+        assert!(file2.staged_status.is_none());
+        assert_eq!(file1.unstaged_status, Some("modified".to_string()));
+        assert_eq!(file2.unstaged_status, Some("modified".to_string()));
+    }
+
+    #[test]
+    fn test_unstage_dir_nested() {
+        let (temp_dir, repo) = create_test_repo();
+
+        // Create nested directory structure
+        fs::create_dir_all(temp_dir.path().join("src/components")).unwrap();
+        commit_file(&repo, "src/main.txt", "main", &temp_dir);
+        commit_file(&repo, "src/components/comp1.txt", "comp1", &temp_dir);
+
+        // Modify and stage all files
+        create_file_with_content(&temp_dir, "src/main.txt", "main modified");
+        create_file_with_content(&temp_dir, "src/components/comp1.txt", "comp1 modified");
+        stage_file(&repo, "src/main.txt").unwrap();
+        stage_file(&repo, "src/components/comp1.txt").unwrap();
+
+        // Unstage src directory
+        let status = unstage_dir(&repo, "src").unwrap();
+
+        // All files should be unstaged
+        let main = status.entries.iter().find(|e| e.path == "src/main.txt").unwrap();
+        let comp1 = status.entries.iter().find(|e| e.path == "src/components/comp1.txt").unwrap();
+
+        assert!(main.staged_status.is_none());
+        assert!(comp1.staged_status.is_none());
+    }
+
+    #[test]
+    fn test_stage_dir_empty_path() {
+        let (temp_dir, repo) = create_test_repo();
+
+        // Create files in root
+        commit_file(&repo, "file1.txt", "content 1", &temp_dir);
+        commit_file(&repo, "file2.txt", "content 2", &temp_dir);
+
+        // Modify both files
+        create_file_with_content(&temp_dir, "file1.txt", "modified 1");
+        create_file_with_content(&temp_dir, "file2.txt", "modified 2");
+
+        // Stage root directory (empty string)
+        let status = stage_dir(&repo, "", false).unwrap();
+
+        // Both files should be staged
+        let file1 = status.entries.iter().find(|e| e.path == "file1.txt").unwrap();
+        let file2 = status.entries.iter().find(|e| e.path == "file2.txt").unwrap();
+
+        assert_eq!(file1.staged_status, Some("modified".to_string()));
+        assert_eq!(file2.staged_status, Some("modified".to_string()));
+    }
+
+    #[test]
+    fn test_stage_dir_partial_already_staged() {
+        let (temp_dir, repo) = create_test_repo();
+
+        // Create directory structure
+        fs::create_dir_all(temp_dir.path().join("src")).unwrap();
+        commit_file(&repo, "src/file1.txt", "content 1", &temp_dir);
+        commit_file(&repo, "src/file2.txt", "content 2", &temp_dir);
+        commit_file(&repo, "src/file3.txt", "content 3", &temp_dir);
+
+        // Modify all files
+        create_file_with_content(&temp_dir, "src/file1.txt", "modified 1");
+        create_file_with_content(&temp_dir, "src/file2.txt", "modified 2");
+        create_file_with_content(&temp_dir, "src/file3.txt", "modified 3");
+
+        // Stage only file1
+        stage_file(&repo, "src/file1.txt").unwrap();
+
+        // Stage directory (should skip file1, stage file2 and file3)
+        let status = stage_dir(&repo, "src", false).unwrap();
+
+        // All files should be staged now
+        assert!(status.entries.iter().all(|e| {
+            if e.path.starts_with("src/file") {
+                e.staged_status.is_some()
+            } else {
+                true
+            }
+        }));
+    }
+
+    #[test]
+    fn test_stage_dir_roundtrip() {
+        let (temp_dir, repo) = create_test_repo();
+
+        // Create directory structure
+        fs::create_dir_all(temp_dir.path().join("src")).unwrap();
+        commit_file(&repo, "src/file1.txt", "content 1", &temp_dir);
+        commit_file(&repo, "src/file2.txt", "content 2", &temp_dir);
+
+        // Modify files
+        create_file_with_content(&temp_dir, "src/file1.txt", "modified 1");
+        create_file_with_content(&temp_dir, "src/file2.txt", "modified 2");
+
+        // Stage directory
+        stage_dir(&repo, "src", false).unwrap();
+
+        // Unstage directory
+        let status = unstage_dir(&repo, "src").unwrap();
+
+        // Files should be unstaged with modifications
+        let file1 = status.entries.iter().find(|e| e.path == "src/file1.txt").unwrap();
+        let file2 = status.entries.iter().find(|e| e.path == "src/file2.txt").unwrap();
+
+        assert!(file1.staged_status.is_none());
+        assert!(file2.staged_status.is_none());
+        assert_eq!(file1.unstaged_status, Some("modified".to_string()));
+        assert_eq!(file2.unstaged_status, Some("modified".to_string()));
     }
 }

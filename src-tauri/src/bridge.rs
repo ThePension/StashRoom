@@ -163,6 +163,41 @@ pub fn unstage_file(
     }
 }
 
+#[tauri::command]
+pub fn stage_dir(
+    repo_id: String,
+    dir: String,
+    include_untracked: bool,
+    state: State<AppState>,
+) -> ApiResponse<StatusMatrix> {
+    let repo = match state.repo_registry.get_repo(&repo_id) {
+        Ok(r) => r,
+        Err(e) => return ApiResponse::error("REPO_NOT_FOUND".to_string(), e.to_string()),
+    };
+
+    match stage::stage_dir(&repo, &dir, include_untracked) {
+        Ok(status) => ApiResponse::success(status),
+        Err(e) => ApiResponse::error("STAGE_DIR_ERROR".to_string(), e.to_string()),
+    }
+}
+
+#[tauri::command]
+pub fn unstage_dir(
+    repo_id: String,
+    dir: String,
+    state: State<AppState>,
+) -> ApiResponse<StatusMatrix> {
+    let repo = match state.repo_registry.get_repo(&repo_id) {
+        Ok(r) => r,
+        Err(e) => return ApiResponse::error("REPO_NOT_FOUND".to_string(), e.to_string()),
+    };
+
+    match stage::unstage_dir(&repo, &dir) {
+        Ok(status) => ApiResponse::success(status),
+        Err(e) => ApiResponse::error("UNSTAGE_DIR_ERROR".to_string(), e.to_string()),
+    }
+}
+
 // ============================================================================
 // Discard Commands
 // ============================================================================
