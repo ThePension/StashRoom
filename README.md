@@ -75,6 +75,10 @@ See [QUICKSTART.md](./QUICKSTART.md) for detailed instructions.
 | `D` | Discard changes (with backup) |
 | `Esc` | Close modals |
 
+## Licensing
+
+This project is licensed under PolyForm Noncommercial 1.0.0. You may fork this repository on GitHub and submit pull requests and patches for collaboration purposes. Any redistribution outside GitHub or any commercial use is not permitted without a separate license from the authors.
+
 ---
 
 **Built with ❤️ using Rust, React, and TypeScript**
