@@ -53,7 +53,7 @@ fn discard_file(repo: &Repository, path: &str) -> Result<()> {
     let commit = head.peel_to_commit()?;
     let tree = commit.tree()?;
 
-    if let Ok(entry) = tree.get_path(Path::new(path)) {
+    if tree.get_path(Path::new(path)).is_ok() {
         // File exists in HEAD, use Git's checkout functionality to restore it
         // This is equivalent to 'git checkout HEAD -- <path>'
         let tree_obj = commit.as_object();

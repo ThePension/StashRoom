@@ -367,9 +367,6 @@ pub fn stage_dir(repo: &Repository, dir: &str, include_untracked: bool) -> Resul
     let mut index = repo.index().context("Failed to get index")?;
     let workdir = repo.workdir().context("Repository has no working directory")?;
 
-    let mut staged_count = 0;
-    let mut skipped_count = 0;
-
     // Iterate through all entries in the status
     for entry in &status_matrix.entries {
         // Check if this file is under the specified directory
@@ -379,13 +376,11 @@ pub fn stage_dir(repo: &Repository, dir: &str, include_untracked: bool) -> Resul
 
         // Skip untracked files if not requested
         if entry.untracked && !include_untracked {
-            skipped_count += 1;
             continue;
         }
 
         // Skip if already staged (no unstaged changes and not untracked)
         if entry.unstaged_status.is_none() && !entry.untracked {
-            skipped_count += 1;
             continue;
         }
 
@@ -397,13 +392,11 @@ pub fn stage_dir(repo: &Repository, dir: &str, include_untracked: bool) -> Resul
             index
                 .add_path(Path::new(&entry.path))
                 .context(format!("Failed to add file to index: {}", entry.path))?;
-            staged_count += 1;
         } else {
             // File doesn't exist (was deleted), remove from index
             index
                 .remove_path(Path::new(&entry.path))
                 .context(format!("Failed to remove file from index: {}", entry.path))?;
-            staged_count += 1;
         }
     }
 
@@ -434,9 +427,6 @@ pub fn unstage_dir(repo: &Repository, dir: &str) -> Result<StatusMatrix> {
     // Get index once
     let mut index = repo.index().context("Failed to get index")?;
 
-    let mut unstaged_count = 0;
-    let mut skipped_count = 0;
-
     // Iterate through all entries in the status
     for entry in &status_matrix.entries {
         // Check if this file is under the specified directory
@@ -446,7 +436,6 @@ pub fn unstage_dir(repo: &Repository, dir: &str) -> Result<StatusMatrix> {
 
         // Skip if no staged changes
         if entry.staged_status.is_none() {
-            skipped_count += 1;
             continue;
         }
 
@@ -471,13 +460,11 @@ pub fn unstage_dir(repo: &Repository, dir: &str) -> Result<StatusMatrix> {
             index
                 .add(&index_entry)
                 .context(format!("Failed to add entry to index: {}", entry.path))?;
-            unstaged_count += 1;
         } else {
             // File doesn't exist in HEAD, remove from index
             index
                 .remove_path(Path::new(&entry.path))
                 .context(format!("Failed to remove path from index: {}", entry.path))?;
-            unstaged_count += 1;
         }
     }
 

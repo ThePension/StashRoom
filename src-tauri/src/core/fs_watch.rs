@@ -105,8 +105,8 @@ impl WatchManager {
         Ok(())
     }
 
-    /// Lists all currently watched repositories
-    pub fn list_watched(&self) -> Vec<String> {
+    #[cfg(test)]
+    fn list_watched(&self) -> Vec<String> {
         let watchers = self.watchers.lock().unwrap();
         watchers.keys().cloned().collect()
     }
@@ -233,8 +233,6 @@ impl EventCollector {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs;
-    use tempfile::TempDir;
 
     #[test]
     fn test_watch_manager_creation() {

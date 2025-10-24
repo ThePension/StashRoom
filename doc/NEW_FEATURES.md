@@ -2,18 +2,31 @@
 
 * **Diff Search:** Find text within diff
 
+* **Syntax Highlighting:** Monaco with language detection
+* Improve branching management
+* Stashes management
+* Stage all unstaged files
+* There is no feature to discard a hunk ?
+
+* Backups :
+    * Add auto backup purge (remove all files that are older than X -> Let the user define that parameter ?)
+
+* Restore to a specific commit
+* Update a commit ?
+* Remove specific file from history ?
+
+* In the settings :
+    * Add a toggle to activate the discard backup
+
 * Search file in commit history :
     * Add lazy loading when user scrolls
     * Expend search also in the current staging context
 
-* **Syntax Highlighting:** Monaco with language detection
-* Improve branching management
-* Feature to display the whole file, and not only hunks (or maybe a param to define the number or lines around the hunks)
-* Stashes management
-* Stage all unstaged files
-* Detect "renamed" files
-* Detect "moved" files
-* Hierarchical/Tree view of the modified files
+* Select multiple files on the left panel, and stage them all
+    * Discard a directory with the tree view
+
+Commit Stack View (local) :
+* Manage a stack of local commits (like mini PRs): reword/reorder/squash with preview, and a safety “dry-run rebase” check that reports conflicts ahead of time.
 
 Settings :
 

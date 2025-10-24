@@ -144,7 +144,6 @@ impl Default for RepoRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs;
     use tempfile::TempDir;
 
     fn create_test_repo() -> (TempDir, String) {
