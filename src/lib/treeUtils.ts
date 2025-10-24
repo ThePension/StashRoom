@@ -1,4 +1,4 @@
-import type { StatusEntry, FileStatus } from './types';
+import type { StatusEntry } from './types';
 
 export interface TreeNode {
   type: 'file' | 'folder';

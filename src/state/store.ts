@@ -308,18 +308,13 @@ export const useStore = create<AppStore>((set, get) => ({
 
   restoreFromPersistence: async () => {
     try {
-      console.log('Starting restoration from persistence...');
-
       // Load workspace state
       const workspace = await loadWorkspace();
-      console.log('Loaded workspace:', workspace);
-
+      
       if (!workspace || !workspace.repos || workspace.repos.length === 0) {
-        console.log('No workspace data to restore');
         // Still load settings even if no repos
         const settings = await loadSettings();
         if (settings) {
-          console.log('Loaded settings:', settings);
           set({
             settings: {
               showLineNumbers: settings.showLineNumbers,
@@ -335,18 +330,15 @@ export const useStore = create<AppStore>((set, get) => ({
 
       // Validate repo paths (deduplicate first to avoid opening same repo multiple times)
       const paths = [...new Set(workspace.repos.map(r => r.path))];
-      console.log('Validating repo paths:', paths);
-
+      
       const validationResponse = await api.validateRepoPaths(paths);
 
       if (!validationResponse.ok || !validationResponse.data) {
-        console.error('Failed to validate repo paths:', validationResponse);
         return;
       }
 
       const validatedRepos = validationResponse.data;
-      console.log('Validated repos:', validatedRepos);
-
+      
       const validPaths = validatedRepos
         .filter(v => v.exists && v.isGitRepo)
         .map(v => v.path);
@@ -360,7 +352,6 @@ export const useStore = create<AppStore>((set, get) => ({
       // Open valid repos (skip persistence during restoration)
       for (const path of validPaths) {
         try {
-          console.log('Restoring repo:', path);
           await get().openRepo(path, true); // skipPersist = true
         } catch (error) {
           console.error(`Failed to restore repo ${path}:`, error);
@@ -372,7 +363,6 @@ export const useStore = create<AppStore>((set, get) => ({
         const { repos } = get();
         const activeRepo = repos.find(r => r.path === workspace.activeRepoPath);
         if (activeRepo) {
-          console.log('Setting active repo:', activeRepo.path);
           await get().setActiveRepo(activeRepo.repoId, true); // skipPersist = true
         }
       }
@@ -382,7 +372,6 @@ export const useStore = create<AppStore>((set, get) => ({
       // Load settings
       const settings = await loadSettings();
       if (settings) {
-        console.log('Loaded settings:', settings);
         set({
           settings: {
             showLineNumbers: settings.showLineNumbers,
@@ -393,8 +382,6 @@ export const useStore = create<AppStore>((set, get) => ({
           },
         });
       }
-
-      console.log('Restoration complete');
     } catch (error) {
       console.error('Failed to restore from persistence:', error);
       // Don't show error toast on first load - might just be no data yet

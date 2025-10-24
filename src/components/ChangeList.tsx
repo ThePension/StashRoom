@@ -1,11 +1,11 @@
 import { useEffect, useRef, useMemo, useState } from 'react';
 import { Virtuoso } from 'react-virtuoso';
-import { ChevronRight, ChevronDown, Folder, File } from 'lucide-react';
+import { ChevronRight, ChevronDown, Folder, File, MoveRight, MoveLeft, X } from 'lucide-react';
 import { useStore } from '../state/store';
 import { api } from '../lib/api';
 import { toast } from 'sonner';
 import { useConfirm } from '../hooks/useConfirm';
-import { buildTree, flattenTree, getFilesInFolder } from '../lib/treeUtils';
+import { buildTree, flattenTree } from '../lib/treeUtils';
 import type { StatusEntry } from '../lib/types';
 import type { FlatTreeNode } from '../lib/treeUtils';
 
@@ -480,7 +480,6 @@ export function ChangeList({ type }: ChangeListProps) {
               const isExpanded = node.isExpanded ?? false;
               const stats = node.stats!;
               const hasChanges = stats.modified + stats.added + stats.deleted > 0;
-              const hasStaged = stats.hasStaged;
               const isHovered = hoveredFolderPath === node.path;
 
               return (
@@ -524,10 +523,10 @@ export function ChangeList({ type }: ChangeListProps) {
                             handleStageDir(node.path, true);
                           }}
                           disabled={isOperating}
-                          className="px-2 py-0.5 text-xs rounded bg-blue-500 text-white hover:bg-blue-600 flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="px-2 py-1 text-xs rounded bg-blue-500 text-white hover:bg-blue-600 flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
                           title="Stage directory (including untracked files)"
                         >
-                          →
+                          <MoveRight className="w-3 h-3" />
                         </button>
                       )}
                       {type === 'staged' && (
@@ -537,10 +536,10 @@ export function ChangeList({ type }: ChangeListProps) {
                             handleUnstageDir(node.path);
                           }}
                           disabled={isOperating}
-                          className="px-2 py-0.5 text-xs rounded bg-blue-500 text-white hover:bg-blue-600 flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="px-2 py-1 text-xs rounded bg-blue-500 text-white hover:bg-blue-600 flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
                           title="Unstage directory"
                         >
-                          ←
+                          <MoveLeft className="w-3 h-3" />
                         </button>
                       )}
                     </div>
@@ -577,10 +576,10 @@ export function ChangeList({ type }: ChangeListProps) {
                           e.stopPropagation();
                           handleStageToggle(entry);
                         }}
-                        className="px-2 py-0.5 text-xs rounded bg-blue-500 text-white hover:bg-blue-600 flex-shrink-0"
+                        className="px-2 py-1 text-xs rounded bg-blue-500 text-white hover:bg-blue-600 flex-shrink-0"
                         title={type === 'unstaged' ? 'Stage file' : 'Unstage file'}
                       >
-                        {type === 'unstaged' ? '→' : '←'}
+                        {type === 'unstaged' ? <MoveRight className="w-3 h-3" /> : <MoveLeft className="w-3 h-3" />}
                       </button>
                       {type === 'unstaged' && (
                         <button
@@ -589,10 +588,10 @@ export function ChangeList({ type }: ChangeListProps) {
                             e.stopPropagation();
                             entry.untracked ? confirmAndDelete(entry) : confirmAndDiscard(entry);
                           }}
-                          className="px-2 py-0.5 text-xs rounded bg-red-500 text-white hover:bg-red-600 flex-shrink-0"
+                          className="px-2 py-1 text-xs rounded bg-red-500 text-white hover:bg-red-600 flex-shrink-0"
                           title={entry.untracked ? 'Delete file' : 'Discard changes'}
                         >
-                          ✕
+                          <X className="w-3 h-3" />
                         </button>
                       )}
                     </div>
@@ -628,10 +627,10 @@ export function ChangeList({ type }: ChangeListProps) {
                       e.stopPropagation();
                       handleStageToggle(entry);
                     }}
-                    className="px-2 py-0.5 text-xs rounded bg-blue-500 text-white hover:bg-blue-600 flex-shrink-0"
+                    className="px-2 py-1 text-xs rounded bg-blue-500 text-white hover:bg-blue-600 flex-shrink-0"
                     title={type === 'unstaged' ? 'Stage file' : 'Unstage file'}
                   >
-                    {type === 'unstaged' ? '→' : '←'}
+                    {type === 'unstaged' ? <MoveRight className="w-3 h-3" /> : <MoveLeft className="w-3 h-3" />}
                   </button>
                   {type === 'unstaged' && (
                     <button
@@ -640,10 +639,10 @@ export function ChangeList({ type }: ChangeListProps) {
                         e.stopPropagation();
                         entry.untracked ? confirmAndDelete(entry) : confirmAndDiscard(entry);
                       }}
-                      className="px-2 py-0.5 text-xs rounded bg-red-500 text-white hover:bg-red-600 flex-shrink-0"
+                      className="px-2 py-1 text-xs rounded bg-red-500 text-white hover:bg-red-600 flex-shrink-0"
                       title={entry.untracked ? 'Delete file' : 'Discard changes'}
                     >
-                      ✕
+                      <X className="w-3 h-3" />
                     </button>
                   )}
                 </div>

@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { AlertTriangle, Info } from 'lucide-react';
 
 interface ConfirmDialogProps {
   isOpen: boolean;
@@ -49,15 +50,15 @@ export function ConfirmDialog({
 
   const variantStyles = {
     danger: {
-      icon: '⚠️',
+      icon: <AlertTriangle className="w-6 h-6 text-red-500" />,
       confirmButton: 'bg-red-500 hover:bg-red-600 text-white',
     },
     warning: {
-      icon: '⚠️',
+      icon: <AlertTriangle className="w-6 h-6 text-yellow-500" />,
       confirmButton: 'bg-yellow-500 hover:bg-yellow-600 text-white',
     },
     info: {
-      icon: 'ℹ️',
+      icon: <Info className="w-6 h-6 text-blue-500" />,
       confirmButton: 'bg-blue-500 hover:bg-blue-600 text-white',
     },
   };
@@ -79,7 +80,7 @@ export function ConfirmDialog({
           {/* Header */}
           <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
             <div className="flex items-center gap-3">
-              <span className="text-2xl">{style.icon}</span>
+              {style.icon}
               <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
                 {title}
               </h2>

@@ -12,11 +12,6 @@ interface BackupsModalProps {
 
 type ViewMode = 'by-time' | 'by-file';
 
-interface FileVersion {
-  timestamp: string;
-  path: string;
-}
-
 interface FileGroup {
   path: string;
   versions: string[]; // timestamps where this file appears

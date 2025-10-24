@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
-import { Search, FileText, GitCommit, ChevronRight, ChevronDown } from 'lucide-react';
+import { Search, FileText, GitCommit, ChevronRight, ChevronDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { useStore } from '../state/store';
 import { api } from '../lib/api';
 import type { FileSearchResult } from '../lib/types';
@@ -314,8 +314,9 @@ export function QuickSearchModal({ isOpen, onClose, onNavigateToHistory }: Quick
         <div className="px-4 py-3 bg-gray-50 dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 rounded-b-lg">
           <div className="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
             <div className="flex items-center gap-1">
-              <kbd className="px-1.5 py-0.5 bg-white dark:bg-gray-800 rounded border border-gray-300 dark:border-gray-600">
-                ↑↓
+              <kbd className="px-1.5 py-0.5 bg-white dark:bg-gray-800 rounded border border-gray-300 dark:border-gray-600 flex items-center gap-0.5">
+                <ArrowUp className="w-3 h-3" />
+                <ArrowDown className="w-3 h-3" />
               </kbd>
               <span>Navigate</span>
             </div>

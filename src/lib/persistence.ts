@@ -33,6 +33,7 @@ export interface SettingsState {
   showLineNumbers: boolean;
   contextLines: number | 'all';
   compactMode: boolean;
+  treeViewMode: 'flat' | 'tree';
 }
 
 // Initialize stores
@@ -43,11 +44,9 @@ export interface SettingsState {
 async function initStores() {
   if (!workspaceStore) {
     workspaceStore = await Store.load(WORKSPACE_STORE);
-    console.log('Workspace store loaded');
   }
   if (!settingsStore) {
     settingsStore = await Store.load(SETTINGS_STORE);
-    console.log('Settings store loaded');
   }
 }
 
@@ -118,5 +117,6 @@ export function createDefaultSettings(): SettingsState {
     showLineNumbers: false,
     contextLines: 3,
     compactMode: false,
+    treeViewMode: 'flat',
   };
 }
